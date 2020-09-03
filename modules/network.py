@@ -123,7 +123,7 @@ class ResidualNetwork(nn.Module):
         self,
         num_units: int = 2,
         n_classes: int = 2,
-        in_channels: int = 3,
+        in_channels: int = 1,
         base_channels: int = 16,
     ):
         """
@@ -135,7 +135,8 @@ class ResidualNetwork(nn.Module):
         :param in_channels: number of input channels
         """
         super().__init__()
-        self.network = nn.Sequential(
+        self.n_classes = n_classes
+        self.features = nn.Sequential(
             nn.Conv2d(
                 in_channels=in_channels,
                 out_channels=base_channels,
@@ -181,25 +182,31 @@ class ResidualNetwork(nn.Module):
                 nn.init.constant_(m.bias, 0)
 
     def forward(self, x: Tensor) -> Tensor:
-        x = self.network(x)
+        x = self.features(x)
         return self.fc(x)
 
 
-def resnet10(n_classes: int, **kwargs: Any) -> nn.Module:
+def resnet10(n_classes: int, base_channels: int = 16, **kwargs: Any) -> nn.Module:
     """
     ResNet-10 v2
     :param n_classes: number of classes for the last dense layer
+    :param base_channels: number of channels in the first layer
     :param kwargs: keyword arguments for ResidualNetwork
     :return: ResidualNetwork
     """
-    return ResidualNetwork(num_units=1, base_channels=16, n_classes=n_classes, **kwargs)
+    return ResidualNetwork(
+        num_units=1, base_channels=base_channels, n_classes=n_classes, **kwargs
+    )
 
 
-def resnet18(n_classes: int, **kwargs: Any) -> nn.Module:
+def resnet18(n_classes: int, base_channels: int = 16, **kwargs: Any) -> nn.Module:
     """
     ResNet-18 v2
     :param n_classes: number of classes for the last dense layer
+    :param base_channels: number of channels in the first layer
     :param kwargs: keyword arguments for ResidualNetwork
     :return: ResidualNetwork
     """
-    return ResidualNetwork(num_units=2, base_channels=16, n_classes=n_classes, **kwargs)
+    return ResidualNetwork(
+        num_units=2, base_channels=base_channels, n_classes=n_classes, **kwargs
+    )
