@@ -4,13 +4,11 @@ import numpy as np
 import pandas as pd
 import pytorch_lightning as pl
 import torch
+from loss import ArcFaceLoss, ArcMarginProductPlain
 from network import resnet18
 from pytorch_lightning.metrics import Accuracy
-from scipy.spatial.distance import pdist, squareform
-from scipy.stats import kruskal, ks_2samp, mannwhitneyu, wilcoxon
-from sklearn.decomposition import PCA
 from torch import nn
-from tqdm.auto import tqdm
+from tqdm.auto import tqdm, trange
 
 Array = Union[np.ndarray]
 
@@ -20,6 +18,8 @@ class LitModel(pl.LightningModule):
         self,
         network: nn.Module = resnet18(n_classes=182),
         criterion: nn.Module = nn.CrossEntropyLoss(),
+        metric_criterion: nn.Module = ArcFaceLoss(),
+        metric_coefficient: float = 0.25,
         seed: int = 15,
     ):
         super().__init__()
@@ -27,9 +27,12 @@ class LitModel(pl.LightningModule):
 
         self.network = network
         self.criterion = criterion
-
+        self.metric_criterion = metric_criterion
+        self.metric = ArcMarginProductPlain(
+            self.network.fc.in_features, self.network.fc.out_features
+        )
+        self.metric_coefficient = metric_coefficient
         # Metrics
-        # TODO infer from data
         self.accuracy = Accuracy(num_classes=self.network.n_classes)
 
     def forward(self, x):
@@ -38,11 +41,27 @@ class LitModel(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         x, y = batch
 
-        out = self(x)
-        loss = self.criterion(out, y)
-        acc = self.accuracy(out.argmax(1), y)
+        features = self.network.features(x)
+        out = self.network.fc(features)
+        metric_out = self.metric(features)
 
-        result = pl.TrainResult(minimize=loss)
+        if self.metric_coefficient > 0:
+            metric_loss = self.metric_criterion(metric_out, y)
+            clf_loss = self.criterion(out, y)
+
+            loss = (
+                self.metric_coefficient * metric_loss
+                + (1 - self.metric_coefficient) * clf_loss
+            )
+
+            result = pl.TrainResult(minimize=loss)
+            result.log("clf_loss", clf_loss)
+            result.log("metric_loss", metric_loss)
+        else:
+            loss = self.criterion(out, y)
+            result = pl.TrainResult(minimize=loss)
+
+        acc = self.accuracy(out.argmax(1), y)
         result.log("train_loss", loss)
         result.log("train_acc", acc)
         #         result.log('progress_bar', {'acc': acc})
@@ -57,10 +76,22 @@ class LitModel(pl.LightningModule):
         acc = self.accuracy(out.argmax(1), y)
 
         result = pl.EvalResult(checkpoint_on=loss)
-        result.log("val_loss", loss)
-        result.log("val_acc", acc)
+        result.log_dict({"val_loss": loss, "val_acc": acc}, prog_bar=True, on_epoch=True)
 
         return result
+
+    # def validation_end(self, outputs):
+    #     # print(outputs)
+    #     # avg_loss = torch.stack([x['val_loss'] for x in outputs]).mean()
+    #     # avg_acc = torch.stack([x['val_acc'] for x in outputs]).mean()
+    #
+    #     avg_loss = outputs['val_loss'].mean()
+    #     avg_acc = outputs['val_acc'].mean()
+    #
+    #     return {
+    #         'val_loss': avg_loss,
+    #         'val_acc': avg_acc,
+    #         'progress_bar': {'val_loss': avg_loss, 'val_acc': avg_acc}}
 
     # def test_step(self, batch, batch_idx):
     #     x, y = batch
@@ -79,7 +110,16 @@ class LitModel(pl.LightningModule):
     #     return stacked
 
     def configure_optimizers(self):
-        return torch.optim.Adam(self.network.parameters(), lr=3e-4)
+        optimizers = [torch.optim.Adam(self.network.parameters(), lr=3e-4)]
+        # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=50)
+        schedulers = [
+            {
+                'scheduler': torch.optim.lr_scheduler.ReduceLROnPlateau(optimizers[0], factor=0.1),
+                'monitor': 'val_checkpoint_on',  # Default: val_loss
+                'interval': 'epoch',
+                'frequency': 1
+            }]
+        return optimizers, schedulers
 
     def on_validation_epoch_start(self):
         for dl in self.trainer.val_dataloaders:
@@ -118,85 +158,3 @@ class LitModel(pl.LightningModule):
 
         self.unfreeze()
         return predictions, features, ys
-
-
-def aggregate(metainfo: pd.DataFrame, features: Array, group_by_replicate: bool = True):
-    """
-    Aggregate features by metainfo `label` column
-    :param metainfo: metainfo about files
-    :param features: extracted features
-    :param group_by_replicate: extracted features
-    :return:
-    """
-    assert (
-        len(metainfo["label"].unique()) == 4
-    ), "There should be 4 labels in metainfo for this analysis"
-
-    features_df = pd.DataFrame(features)
-    features_df["label"] = metainfo["label"]
-    features_df["replicate"] = metainfo["replicate"]
-    groups = ["replicate", "label"] if group_by_replicate else "label"
-
-    return features_df.groupby(groups).mean()
-
-
-def measure_pairwise_distance(
-    aggregated_features: Array, pairs: List[str], metric: str = "cosine"
-):
-    """
-    Measure distances between WT and DELTA conditions:
-                         POR1-GFP POR2-WT 	POR2-GFP POR1-WT
-    POR1-GFP POR2-DELTA 	0.047326 	        1.049365
-    POR2-GFP POR1-DELTA 	0.811942        	1.097588
-    :param aggregated_features: array of aggregated features (4, n_features)
-    :param pairs: list of row names
-    :param metric: metric to put in table
-    :return: DataFrame, for both genes in pair measure distances
-    """
-    df = (
-        pd.DataFrame(
-            squareform(pdist(aggregated_features, metric=metric)),
-            columns=pairs,
-            index=pairs,
-        )
-        .drop([p for p in pairs if p.endswith("DELTA")], axis=1)
-        .drop([p for p in pairs if p.endswith("WT")], axis=0)
-    )
-    return df
-
-
-def stat_test_pc(features, labels, stat_test=kruskal, pc: int = 0, **kwargs):
-    """Run univariate statistical test for the principal component"""
-    tfm = PCA(n_components=1)
-    tfm_features = tfm.fit_transform(features)
-    feature = tfm_features[:, pc].squeeze()
-    groups, group_counts = np.unique(labels, return_counts=True)
-
-    # stat_test(delta, wt)
-    res = {
-        groups[0]
-        .split("-")[0]: stat_test(
-            feature[labels == groups[0]], feature[labels == groups[1]], **kwargs
-        )
-        ._asdict(),
-        groups[2]
-        .split("-")[0]: stat_test(
-            feature[labels == groups[2]], feature[labels == groups[3]], **kwargs
-        )
-        ._asdict(),
-    }
-    res = pd.DataFrame(res).T
-    res["test"] = stat_test.__name__
-
-    return res, feature
-
-
-def test_pairs(pairs: List):
-    """
-    Test all the pairs in format KIN1-KIN2
-    :param pairs:
-    :return:
-    """
-    for pair in pairs:
-        g1, g2 = pair.split("-")
-        dataset = FramesDataset()

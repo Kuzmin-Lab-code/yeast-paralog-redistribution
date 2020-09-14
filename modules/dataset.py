@@ -103,7 +103,12 @@ class FramesDataset(Dataset):
             else:
                 self.files = sorted(
                     glob.glob(
-                        str(self.path_frames / f"replicate{replicate}" / "*" / f"*.{fmt}")
+                        str(
+                            self.path_frames
+                            / f"replicate{replicate}"
+                            / "*"
+                            / f"*.{fmt}"
+                        )
                     )
                 )
                 np.save(self.path_index, self.files)

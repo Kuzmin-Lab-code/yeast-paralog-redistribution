@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -10,10 +12,11 @@ from bokeh.plotting import (
     reset_output,
     show,
 )
-from pathlib import Path
 from matplotlib import pyplot as plt
 from matplotlib.patches import Ellipse
 from sklearn.decomposition import PCA
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
 
 
 def calculate_confidence_ellipse(x, y, sd: int = 2):
@@ -40,6 +43,7 @@ def draw_confidence_ellipse(ax, x, y, color: str = "black", sd: int = 2, lw: int
         facecolor="none",
         edgecolor=color,
         lw=lw,
+        zorder=5,
     )
 
     cos_angle = np.cos(np.radians(180.0 - ellipse_params["angle"]))
@@ -80,7 +84,9 @@ def set_legend_marker_alpha(legend, alpha: float = 1):
         lh._legmarker.set_alpha(alpha)
 
 
-def plot_pca(features, metainfo, s: int = 7, use_seaborn=False, save_dir=None):
+def plot_pca(
+    features, metainfo, s: int = 7, use_seaborn=False, save_dir=None, scale=True
+):
 
     # Define color scheme
     colors = np.array(["#377eb8", "#e41a1c", "#ff7f00", "#4daf4a"])
@@ -88,6 +94,8 @@ def plot_pca(features, metainfo, s: int = 7, use_seaborn=False, save_dir=None):
 
     # Transform features
     tfm = PCA(n_components=2)
+    if scale:
+        tfm = make_pipeline(StandardScaler(), tfm)
     features_tfm = tfm.fit_transform(features)
 
     df = pd.DataFrame(
@@ -139,7 +147,8 @@ def plot_pca(features, metainfo, s: int = 7, use_seaborn=False, save_dir=None):
                 points_replicate_label.append(points)
             points_label.append(points_replicate_label.copy())
 
-            # Confidence ellipse (for all replicates)
+        # Confidence ellipse (for all replicates)
+        for label, color in zip(label_order, colors):
             ellipse, within_ellipse = draw_confidence_ellipse(
                 ax,
                 df.loc[df.Label == label, "x"],
