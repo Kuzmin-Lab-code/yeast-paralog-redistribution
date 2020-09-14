@@ -6,7 +6,7 @@ from skimage.measure import label
 from skimage.morphology import binary_erosion
 
 
-def semantic_to_binary(segmentation: Array):
+def semantic_to_binary(segmentation: Array) -> Array:
     """
     Transforms semantic segmentation to binary by eroding each object
     :param segmentation: semantic segmentation array, each object labeled with a distinct number

@@ -196,3 +196,34 @@ def plot_pca(
         plt.savefig(save_dir / f"{pair}.png", bbox_inches="tight")
 
     return fig, ax
+
+
+def plot_abundance_boxplots(
+    metainfo_pair,
+    log_scale=True,
+    separate_replicates=True,
+    save=False,
+    save_path="../results/abundance/",
+):
+    fig, axes = plt.subplots(ncols=2, figsize=(12, 4), sharey=True)
+    pair = np.unique(metainfo_pair.GFP)
+    for i, (gene, ax) in enumerate(zip(pair, axes)):
+        sns.boxplot(
+            data=metainfo_pair[metainfo_pair.GFP == gene],
+            x="label",
+            y="abundance",
+            hue="replicate" if separate_replicates else None,
+            ax=ax,
+        )
+        labels = [item.get_text().replace(" ", "\n") for item in ax.get_xticklabels()]
+        ax.set_xticklabels(labels)
+        ax.set_title(gene)
+        if log_scale:
+            ax.set(yscale="log")
+    plt.tight_layout()
+    if save:
+        pair = "-".join(pair)
+        plt.savefig(f"{save_path}/{pair}.png")
+        fig.clear()
+    else:
+        plt.show()
