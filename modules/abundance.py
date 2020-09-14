@@ -78,3 +78,28 @@ def aggregate_protein_abundance(
 
     results = pd.concat(results)
     return results
+
+
+def relative_abundance_changes(aggregated_abundance: DataFrame) -> DataFrame:
+    """
+    Calculate relative abundance changes by gene pair and replicate
+    :param aggregated_abundance: dataframe from `aggregate_protein_abundance`
+    :return: dataframe with delta / wt intensity ratios
+    """
+    results = []
+    for (pair, replicate), df in tqdm(
+        aggregated_abundance.reset_index().groupby(["pairs", "replicate"])
+    ):
+        df = df.reset_index()[["label", "abundance"]]
+        df["GFP"] = df["label"].apply(lambda x: x.split("-")[0])
+        for gene, group in df.groupby("GFP"):
+            if len(group) == 2:  # Skip groups where data is unavailable
+                # Calculate delta / wt intensity ratio
+                abundance = group["abundance"].tolist()
+                ratio = abundance[0] / abundance[1]
+                results.append(
+                    {"GFP": gene, "pair": pair, "replicate": replicate, "ratio": ratio}
+                )
+
+    results = pd.DataFrame(results)
+    return results

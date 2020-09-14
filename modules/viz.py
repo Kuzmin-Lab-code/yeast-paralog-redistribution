@@ -227,3 +227,32 @@ def plot_abundance_boxplots(
         fig.clear()
     else:
         plt.show()
+
+
+def plot_relative_changes(relative_changes):
+    """
+    Plot relative_abundance_changes() output as a boxplot
+    :param relative_changes:
+    :return:
+    """
+    fig, ax = plt.subplots(figsize=(15, 5))
+    relative_changes = relative_changes.dropna()
+    coords = np.log(relative_changes["ratio"])
+    sns.stripplot(coords, linewidth=1, ax=ax, jitter=0.2)
+    sns.boxplot(coords, fliersize=0, whis=3, boxprops=dict(alpha=0.2))
+
+    interesting = []
+    for c in ax.collections:
+        for name, replicate, of in zip(
+            relative_changes.GFP.tolist(),
+            relative_changes.replicate.tolist(),
+            c.get_offsets(),
+        ):
+            if of[0] < -1 or of[0] > 1:
+                name = f"{name} (R{replicate[-1]})"
+                ax.annotate(name, of)
+                interesting.append(name)
+
+    plt.tight_layout()
+    ax.set_xlabel("log relative intensity (delta / WT)")
+    plt.show()
