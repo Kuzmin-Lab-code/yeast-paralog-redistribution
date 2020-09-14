@@ -1,5 +1,5 @@
 import glob
-from typing import List, Union
+from types import List, Union
 
 import numpy as np
 import pandas as pd

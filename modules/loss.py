@@ -60,7 +60,7 @@ class ArcFaceLoss(nn.Module):
         #         output = (labels * phi) + ((1.0 - labels) * cosine)
         output *= self.s
         loss = self.criterion(output, one_hot)
-        # TODO remove / 2 ?
+        # Scale to put in range of CE loss
         return loss / 2
 
 

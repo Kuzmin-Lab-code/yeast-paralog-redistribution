@@ -1,12 +1,11 @@
 import glob
 from pathlib import Path
-from typing import List, Tuple, Union
+from types import *
 
 import albumentations as A
 import numpy as np
 import pandas as pd
 from albumentations.pytorch import transforms as T
-from torch import Tensor
 from torch.utils.data import Dataset, Sampler, SubsetRandomSampler
 
 
@@ -88,7 +87,8 @@ class FramesDataset(Dataset):
         self.validation_field = validation_field
         self.select = select
         self.metainfo_cached = (
-            self.path_data / f"metainfo_replicate{self.replicate}_{self.select}.csv"
+            self.path_data
+            / f"metainfo_replicate{self.replicate}_{'-'.join(self.select)}.csv"
         )
 
         # Read file list

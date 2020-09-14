@@ -1,7 +1,6 @@
-from typing import List, Union
+from types import *
 
 import numpy as np
-import pandas as pd
 import pytorch_lightning as pl
 import torch
 from loss import ArcFaceLoss, ArcMarginProductPlain
@@ -9,8 +8,6 @@ from network import resnet18
 from pytorch_lightning.metrics import Accuracy
 from torch import nn
 from tqdm.auto import tqdm, trange
-
-Array = Union[np.ndarray]
 
 
 class LitModel(pl.LightningModule):
@@ -76,7 +73,9 @@ class LitModel(pl.LightningModule):
         acc = self.accuracy(out.argmax(1), y)
 
         result = pl.EvalResult(checkpoint_on=loss)
-        result.log_dict({"val_loss": loss, "val_acc": acc}, prog_bar=True, on_epoch=True)
+        result.log_dict(
+            {"val_loss": loss, "val_acc": acc}, prog_bar=True, on_epoch=True
+        )
 
         return result
 
@@ -114,11 +113,14 @@ class LitModel(pl.LightningModule):
         # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=50)
         schedulers = [
             {
-                'scheduler': torch.optim.lr_scheduler.ReduceLROnPlateau(optimizers[0], factor=0.1),
-                'monitor': 'val_checkpoint_on',  # Default: val_loss
-                'interval': 'epoch',
-                'frequency': 1
-            }]
+                "scheduler": torch.optim.lr_scheduler.ReduceLROnPlateau(
+                    optimizers[0], factor=0.1
+                ),
+                "monitor": "val_checkpoint_on",  # Default: val_loss
+                "interval": "epoch",
+                "frequency": 1,
+            }
+        ]
         return optimizers, schedulers
 
     def on_validation_epoch_start(self):

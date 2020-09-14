@@ -1,6 +1,6 @@
-import numpy as np
+from types import *
 
-Array = np.ndarray
+import numpy as np
 
 
 def accuracy(y_true: Array, y_pred: Array, top: int = 1):

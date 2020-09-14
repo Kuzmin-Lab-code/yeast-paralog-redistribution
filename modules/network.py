@@ -1,8 +1,7 @@
 import warnings
-from typing import Any
+from types import *
 
 import torch
-from torch import Tensor
 from torch import nn as nn
 from torch.nn import functional as F
 
