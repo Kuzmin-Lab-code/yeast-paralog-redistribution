@@ -4,6 +4,15 @@ from tools.typing import *
 from tqdm.auto import tqdm
 
 
+def read_np_pil(path: PathT) -> ndarray:
+    """
+    Read an image to numpy array
+    :param path: path to image
+    :return: np array
+    """
+    return np.array(Image.open(path))
+
+
 def min_max_scale(img: Array) -> Array:
     """
     Scales image between 0 and 1
@@ -12,6 +21,7 @@ def min_max_scale(img: Array) -> Array:
     """
     mi, ma = img.min(), img.max()
     return (img - mi) / (ma - mi)
+
 
 def standardize(img: Array) -> Array:
     """
@@ -28,7 +38,7 @@ def log_transform_scale(img: Array) -> Array:
     :param img: image to transform
     :return:
     """
-    tfm = np.log1p(img)
+    tfm = np.log1p(img - img.min())
     return min_max_scale(tfm)
 
 
@@ -41,7 +51,7 @@ def calculate_readout_noise(
     :param return_images: whether to return all the images read as a second element
     :return: noise, (images - optional)
     """
-    images = np.array([np.array(Image.open(fn)) for fn in tqdm(filenames)])
+    images = np.array([read_np_pil(fn) for fn in tqdm(filenames)])
     noise = np.median(images, axis=0)
     if return_images:
         return noise, images

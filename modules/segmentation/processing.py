@@ -1,8 +1,13 @@
+import glob
+import sys
+from pathlib import Path
+
 import numpy as np
 from scipy.ndimage.morphology import distance_transform_edt
 from skimage.measure import label
 from skimage.morphology import binary_erosion, erosion
-from tools.typing import Array
+from tools.typing import Array, PathT
+from tqdm.auto import tqdm
 
 
 def semantic_to_binary(segmentation: Array) -> Array:
@@ -110,3 +115,44 @@ def make_distance_transform(
         distance_map /= ma
         out = segmentation_binary * alpha + distance_map * (1 - alpha)
     return out
+
+
+def make_distance_transform_dir(
+    input_dir: PathT,
+    output_dir: PathT,
+    skip_existed: bool = True,
+    alpha: float = 0.8,
+    clip: int = 20,
+    scale_by_stencil: bool = False,
+) -> None:
+    """
+    Copies to
+    :param input_dir: directory with object segmentation files
+    :param output_dir: directory to save processed files
+    :param skip_existed: if we skip existed files or rewrite them
+    :param scale_by_stencil: bool, if to scale distance transform by stencil, scaled by image otherwise
+    :param alpha: coefficient to combine stencils with distance transform
+    :param clip: max value of distance transform before scaling
+    :return: transformed segmentation map
+    """
+    assert output_dir != input_dir
+    search_path = str(Path(input_dir) / "**/*.npy")
+    filenames = sorted(glob.glob(search_path))
+    iterator = tqdm(filenames)
+    for fn in iterator:
+        try:
+            output_fn = Path(fn.replace(input_dir, output_dir))
+            iterator.set_postfix({"input": str(fn), "output": str(output_fn)})
+            if output_fn.exists() and skip_existed:
+                continue
+            output_fn.parents[0].mkdir(exist_ok=True, parents=True)
+            s = np.load(fn)
+            s = make_distance_transform(
+                s, alpha=alpha, clip=clip, scale_by_stencil=scale_by_stencil
+            )
+            np.save(output_fn, s)
+        except KeyboardInterrupt:
+            break
+        except:
+            print(f"Unexpected error in {fn}:", sys.exc_info()[0])
+            raise

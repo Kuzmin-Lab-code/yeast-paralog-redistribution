@@ -8,6 +8,7 @@ from albumentations.pytorch import transforms as T
 from tools.typing import *
 from torch.utils.data import Dataset, Sampler, SubsetRandomSampler
 
+
 def prepare_metainfo_labels(metainfo: pd.DataFrame) -> pd.DataFrame:
     # fmt: off
     """
@@ -66,7 +67,7 @@ class FramesDataset(Dataset):
         validation_field: Union[int, None] = 4,
         select: Union[None, str, List[str]] = "wt",
         seed: int = 56,
-        transforms: List[A.BasicTransform] = [],
+        transforms: List[Transform] = [],
     ):
         super().__init__()
         # Set random seed for potential split
