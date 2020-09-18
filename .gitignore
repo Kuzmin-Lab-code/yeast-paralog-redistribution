@@ -128,3 +128,7 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+/notebooks/.ipynb_checkpoints/
+/notebooks/lightning_logs/
+/results/pca/
+/results/predictions/

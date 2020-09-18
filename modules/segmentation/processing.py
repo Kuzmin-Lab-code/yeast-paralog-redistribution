@@ -1,9 +1,8 @@
-from types import Array
-
 import numpy as np
 from scipy.ndimage.morphology import distance_transform_edt
 from skimage.measure import label
-from skimage.morphology import binary_erosion
+from skimage.morphology import binary_erosion, erosion
+from tools.typing import Array
 
 
 def semantic_to_binary(segmentation: Array) -> Array:
