@@ -111,7 +111,14 @@ def plot_by_side(
     clean_show(axes)
 
 
-def calculate_confidence_ellipse(x, y, sd: int = 2):
+def calculate_confidence_ellipse(x: ndarray, y: ndarray, sd: int = 2):
+    """
+    Calculate confidence ellipse parameters: width, height, angle
+    :param x: x coordinates
+    :param y: y coordinates
+    :param sd: standard deviations
+    :return: dict of ellipse parameters
+    """
     params = dict(xy=(np.mean(x), np.mean(y)))
     cov = np.cov(x, y)
     lambda_, v = np.linalg.eig(cov)
@@ -124,7 +131,19 @@ def calculate_confidence_ellipse(x, y, sd: int = 2):
     return params
 
 
-def draw_confidence_ellipse(ax, x, y, color: str = "black", sd: int = 2, lw: int = 2):
+def get_confidence_ellipse(
+    x: ndarray, y: ndarray, color: str = "black", sd: int = 2, lw: int = 2
+) -> Tuple[Ellipse, ndarray]:
+    """
+    Creates pyplot artist with confidence ellipse from x and y point coordinates
+    Draw it with ax.add_artist(ellipse)
+    :param x: x coordinates
+    :param y: y coordinates
+    :param color: line color
+    :param sd: standard deviations
+    :param lw: linewidth
+    :return: Ellipse artist
+    """
     ellipse_params = calculate_confidence_ellipse(x, y, sd)
 
     ell = Ellipse(
@@ -151,11 +170,21 @@ def draw_confidence_ellipse(ax, x, y, color: str = "black", sd: int = 2, lw: int
         yct ** 2 / (ellipse_params["height"] / 2.0) ** 2
     )
 
-    ax.add_artist(ell)
     return ell, np.where(rad_cc <= 1)[0]
 
 
-def get_confidence_ellipse_bokeh(x, y, color="black", sd=2, lw=2):
+def get_confidence_ellipse_bokeh(
+    x: ndarray, y: ndarray, color: str = "black", sd: int = 2, lw: int = 2
+) -> glyphs.Ellipse:
+    """
+    Creates bokeh glyph with confidence ellipse from x and y point coordinates
+    :param x: x coordinates
+    :param y: y coordinates
+    :param color: line color
+    :param sd: standard deviations
+    :param lw: linewidth
+    :return: bokeh glyph with confidence ellipse
+    """
     ellipse_params = calculate_confidence_ellipse(x, y, sd)
 
     glyph = glyphs.Ellipse(
@@ -177,10 +206,27 @@ def set_legend_marker_alpha(legend, alpha: float = 1):
 
 
 def plot_pca(
-    features, metainfo, s: int = 7, use_seaborn=False, save_dir=None, scale=True
+    features: ndarray,
+    metainfo: DataFrame,
+    figsize: int = 7,
+    use_seaborn: bool = False,
+    save_dir: Optional[str] = None,
+    scale: bool = True,
+    separate_replicates: bool = False,
 ):
+    """
+    Plot PCA of features array given metainfo data
+    :param features: array of float features (N frames, N features)
+    :param metainfo: metainfo about each frame
+    :param figsize: figure size
+    :param use_seaborn: bool, produce basic plot with seaborn
+    :param save_dir: dir to save image, do not save if None
+    :param scale: bool, apply standard scaling before PCA
+    :param separate_replicates: bool, mark replicates with shapes
+    :return:
+    """
 
-    # Define color scheme
+    # Define color/shape scheme
     colors = np.array(["#377eb8", "#e41a1c", "#ff7f00", "#4daf4a"])
     shapes = ["o", "^", "s"]
 
@@ -203,7 +249,7 @@ def plot_pca(
     label_order = label_order[[1, 0, 3, 2]]  # WT comes first
     label_count = label_count[[1, 0, 3, 2]]  # WT comes first
     replicate_order, replicate_count = np.unique(df.Replicate, return_counts=True)
-    fig, ax = plt.subplots(figsize=(s, s))
+    fig, ax = plt.subplots(figsize=(figsize, figsize))
 
     # Default seaborn version
     if use_seaborn:
@@ -212,7 +258,7 @@ def plot_pca(
             x="x",
             y="y",
             hue="Label",
-            style="Replicate",
+            style="Replicate" if separate_replicates else None,
             alpha=0.5,
             hue_order=label_order,
             s=15,
@@ -223,7 +269,12 @@ def plot_pca(
         for label, color in zip(label_order, colors):
             points_replicate_label = []
             for replicate, shape in zip(replicate_order, shapes):
-                sub_df = df.loc[(df.Label == label) & (df.Replicate == replicate), :]
+                if separate_replicates:
+                    sub_df = df.loc[
+                        (df.Label == label) & (df.Replicate == replicate), :
+                    ]
+                else:
+                    sub_df = df.loc[df.Label == label, :]
                 # Scatter plot
                 (points,) = ax.plot(
                     sub_df.x,
@@ -237,31 +288,38 @@ def plot_pca(
                     markeredgewidth=0.5,
                 )
                 points_replicate_label.append(points)
+                if not separate_replicates:
+                    break
             points_label.append(points_replicate_label.copy())
 
         # Confidence ellipse (for all replicates)
         for label, color in zip(label_order, colors):
-            ellipse, within_ellipse = draw_confidence_ellipse(
-                ax,
+            ellipse, within_ellipse = get_confidence_ellipse(
                 df.loc[df.Label == label, "x"],
                 df.loc[df.Label == label, "y"],
                 color=color,
                 lw=2,
             )
+            ax.add_artist(ellipse)
 
         # Legends
         # Replicates and shapes
-        legend_replicate = ax.legend(
-            points_label[-1],
-            [f"Replicate {r} ({c})" for r, c in zip(replicate_order, replicate_count)],
-            loc=2,
-            markerscale=1.5,
-            framealpha=0.8,
-            fancybox=True,
-            frameon=True,
-        )
-        legend_replicate.set_zorder(6)
-        set_legend_marker_alpha(legend_replicate, 1)
+        if separate_replicates:
+            legend_replicate = ax.legend(
+                points_label[-1],
+                [
+                    f"Replicate {r} ({c})"
+                    for r, c in zip(replicate_order, replicate_count)
+                ],
+                loc=2,
+                markerscale=1.5,
+                framealpha=0.8,
+                fancybox=True,
+                frameon=True,
+            )
+            legend_replicate.set_zorder(6)
+            set_legend_marker_alpha(legend_replicate, 1)
+            ax.add_artist(legend_replicate)
 
         # Labels and colors
         legend_label = ax.legend(
@@ -275,8 +333,7 @@ def plot_pca(
         )
         legend_label.set_zorder(6)
         set_legend_marker_alpha(legend_label, 1)
-
-        ax.add_artist(legend_replicate)
+        ax.add_artist(legend_label)
 
     ax.set_xlabel("PCA 0")
     ax.set_ylabel("PCA 1")
@@ -321,7 +378,7 @@ def plot_abundance_boxplots(
         plt.show()
 
 
-def plot_relative_changes(relative_changes):
+def plot_relative_changes(relative_changes: DataFrame):
     """
     Plot relative_abundance_changes() output as a boxplot
     :param relative_changes:
@@ -335,14 +392,14 @@ def plot_relative_changes(relative_changes):
 
     interesting = []
     for c in ax.collections:
-        for name, replicate, of in zip(
+        for name, replicate, offset in zip(
             relative_changes.GFP.tolist(),
             relative_changes.replicate.tolist(),
             c.get_offsets(),
         ):
-            if of[0] < -1 or of[0] > 1:
+            if offset[0] < -1 or offset[0] > 1:
                 name = f"{name} (R{replicate[-1]})"
-                ax.annotate(name, of)
+                ax.annotate(name, offset)
                 interesting.append(name)
 
     plt.tight_layout()
