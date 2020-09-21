@@ -93,7 +93,7 @@ def plot_by_side(
     titles: Optional[List[str]] = None,
     crop_parameters: Optional[Tuple[int]] = None,
     size: int = 5,
-    cmap='viridis',
+    cmap="viridis",
 ):
     """
     Plot several images side by side

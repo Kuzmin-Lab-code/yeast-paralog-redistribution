@@ -1,9 +1,11 @@
 import glob
 from abc import ABC
+from dataclasses import dataclass, field
 
 import albumentations as A
 import numpy as np
 import pandas as pd
+import torch
 import torch.nn.functional as F
 from albumentations import DualTransform
 from albumentations.pytorch import transforms as T
@@ -16,8 +18,6 @@ from tools.image import (
 )
 from tools.typing import *
 from torch.utils.data import Dataset
-import torch
-from dataclasses import dataclass, field
 
 
 class DivPadding(DualTransform):
@@ -60,14 +60,14 @@ class DivPadding(DualTransform):
 
 class BaseDataset(Dataset):
     def __init__(
-            self,
-            path: PathT,
-            log: bool = True,
-            std: bool = True,
-            cache: bool = False,
-            divisibility: int = 32,
-            subtract_background_noise: bool = True,
-            transforms: Optional[List[Transform]] = None
+        self,
+        path: PathT,
+        log: bool = True,
+        std: bool = True,
+        cache: bool = False,
+        divisibility: int = 32,
+        subtract_background_noise: bool = True,
+        transforms: Optional[List[Transform]] = None,
     ):
         super().__init__()
         self.path = Path(path)
@@ -106,7 +106,9 @@ class BaseDataset(Dataset):
                 self.background = np.load(bg_fn)
             else:
                 print("Background file does not exist, creating...")
-                self.background = calculate_readout_noise(self.files, return_images=False)
+                self.background = calculate_readout_noise(
+                    self.files, return_images=False
+                )
                 np.save(bg_fn, self.background)
         else:
             self.background = 0
@@ -125,12 +127,12 @@ class BaseDataset(Dataset):
 
     def crop_to_original(self, x):
         if self.original_shape is None:
-            raise ValueError('Original shape is not known, get some items first')
+            raise ValueError("Original shape is not known, get some items first")
         slices = tuple(slice(s) for s in self.original_shape)
         # Pad dimensions
         # NB! Assuming torch channel first
         for _ in range(len(slices), len(x.shape)):
-            slices = (slice(None), ) + slices
+            slices = (slice(None),) + slices
         return x[slices]
 
     def eval(self):
@@ -188,14 +190,14 @@ class AnnotatedDataset(BaseDataset):
 
 class ExperimentDataset(BaseDataset):
     def __init__(self, path: str = "../data/images/experiment", *args, **kwargs):
-        super().__init__(path=path, *args,  **kwargs)
+        super().__init__(path=path, *args, **kwargs)
 
     def _get_filenames(self) -> List[str]:
-        return sorted(glob.glob(str(self.path / '**/*.flex')))
+        return sorted(glob.glob(str(self.path / "**/*.flex")))
 
     def __getitem__(self, item):
         image = read_np_pil(self.files[item]).astype(np.float32)
         image = self._normalize_image(image)
-        image = self.base_transforms(image=image[..., None])['image']
+        image = self.base_transforms(image=image[..., None])["image"]
         label = torch.zeros_like(image)  # fill in label with 0 for compatibility
         return image, label

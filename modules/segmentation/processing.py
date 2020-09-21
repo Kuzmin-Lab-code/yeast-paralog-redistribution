@@ -1,18 +1,17 @@
 import glob
+import shutil
 import sys
 
 import numpy as np
-from scipy.ndimage.morphology import distance_transform_edt
-from skimage.measure import label
-from skimage.morphology import binary_erosion, erosion
-from tqdm.auto import tqdm
-
-
-from skimage.morphology import remove_small_holes, remove_small_objects
+from matplotlib.pyplot import imread
 from scipy.ndimage.measurements import center_of_mass
+from scipy.ndimage.morphology import distance_transform_edt
+from skimage.measure import label, regionprops
+from skimage.morphology import binary_erosion, remove_small_holes, remove_small_objects
 from skimage.segmentation import watershed
-
+from tools.image import read_np_pil
 from tools.typing import *
+from tqdm.auto import tqdm
 
 
 def semantic_to_binary(segmentation: Array) -> Array:
@@ -55,7 +54,7 @@ def process_stencil(stencil: Array, distance_map: Array, alpha: float = 0.8) -> 
     """
     assert 0 < alpha < 1, "Alpha should be a float between 0 and 1"
     assert (
-            stencil.shape == distance_map.shape
+        stencil.shape == distance_map.shape
     ), f"Arrays should have the same shape, not {stencil.shape} and {distance_map.shape}"
     stencil = binary_erosion(stencil)  # Erode stencil
     stencil_dt = distance_map.copy()  # Copy distance transform (dt) array
@@ -66,10 +65,10 @@ def process_stencil(stencil: Array, distance_map: Array, alpha: float = 0.8) -> 
 
 
 def make_distance_transform(
-        segmentation: Array,
-        alpha: float = 0.8,
-        clip: int = 20,
-        scale_by_stencil: bool = False,
+    segmentation: Array,
+    alpha: float = 0.8,
+    clip: int = 20,
+    scale_by_stencil: bool = False,
 ) -> Array:
     """
     Makes distance transform from a segmentation array
@@ -123,12 +122,12 @@ def make_distance_transform(
 
 
 def make_distance_transform_dir(
-        input_dir: PathT,
-        output_dir: PathT,
-        skip_existed: bool = True,
-        alpha: float = 0.8,
-        clip: int = 20,
-        scale_by_stencil: bool = False,
+    input_dir: PathT,
+    output_dir: PathT,
+    skip_existed: bool = True,
+    alpha: float = 0.8,
+    clip: int = 20,
+    scale_by_stencil: bool = False,
 ) -> None:
     """
     Copies to
@@ -163,8 +162,13 @@ def make_distance_transform_dir(
             raise
 
 
-def watershed_distance_map(distance_map: ndarray, seed_threshold: float = 0.8, mask_threshold: float = 0.5,
-                           region_assurance: bool = True, small_size_threshold: int = 32) -> ndarray:
+def watershed_distance_map(
+    distance_map: ndarray,
+    seed_threshold: float = 0.8,
+    mask_threshold: float = 0.5,
+    region_assurance: bool = True,
+    small_size_threshold: int = 32,
+) -> ndarray:
     """
     Use watershed to binarize distance map
     :param distance_map: distance map either from algorithm or neural network output
@@ -189,3 +193,81 @@ def watershed_distance_map(distance_map: ndarray, seed_threshold: float = 0.8, m
     ws = watershed(-distance_map, markers=label(seed), mask=mask, watershed_line=True)
     ws = remove_small_objects(ws, small_size_threshold)
     return ws
+
+
+def extract_frames_from_image(
+    image: ndarray, segmentation: ndarray, size: int = 64, mask_background: bool = False
+) -> ndarray:
+    """
+    Crops square frames from image around stencil centroids in segmentation
+    :param image: image with objects
+    :param segmentation: binary segmentation
+    :param size: size of frame
+    :param mask_background: bool, make background zero
+    :return: ndarray of frames
+    """
+    pad_image, pad_segmentation = map(
+        lambda x: np.pad(x, size // 2), [image, segmentation]
+    )
+    if mask_background:
+        pad_image[pad_segmentation < 0.5] = 0
+    centroids = [p["centroid"] for p in regionprops(label(pad_segmentation))]
+
+    n_obj = len(centroids)
+    out = np.zeros((n_obj, size, size))
+
+    for i, c in enumerate(centroids):
+        s = tuple(slice(int(x - size // 2), int(x + size // 2)) for x in c)
+        out[i] = pad_image[s]
+
+    return out
+
+
+def extract_frames_by_path(
+    path_image: PathT = "../data/images/experiment/input/",
+    path_segmentation: PathT = "../data/images/experiment/label/",
+    path_frames: PathT = "../data/frames/",
+    rewrite_existing: bool = False,
+    **kwargs,
+):
+    """
+    Extract frames from images using segmentation and preserving folder structure
+    :param path_image: path to image root folder, search for .flex in subfolders
+    :param path_segmentation: path to segmentation root folder, search for .png in subfolders
+    :param path_frames: path to save extracted frames
+    :param rewrite_existing: if False, skip existing files
+    :param kwargs: for extract_frames_from_image()
+    :return:
+    """
+
+    files_segmentation = sorted(glob.glob(f"{path_segmentation}/**/*."))
+    for fs in tqdm(files_segmentation):
+        fi = fs.replace(path_segmentation, path_image).replace("flex", "png")
+        path_frames_from_image = Path(path_frames) / fs.split("/")[-1].split(".")[0]
+
+        try:
+            # Make path to frames, they will be stored in a folder with the name of parent file
+            path_frames_from_image.mkdir(exist_ok=rewrite_existing, parents=True)
+
+            # Read image and segmentation
+            image = read_np_pil(fi)
+            segmentation = imread(fs)
+
+            # Extract frames from image
+            frames = extract_frames_from_image(image, segmentation, **kwargs)
+
+            # Save each frame in .npy file
+            for i, frame in enumerate(frames):
+                np.save(path_frames_from_image / f"{i:05d}", frame)
+
+        except FileExistsError:
+            # Skip existing directories
+            continue
+
+        except Exception as e:
+            print(e)
+            print(
+                f"Error occurred in {path_frames_from_image}, remove the directory and break"
+            )
+            shutil.rmtree(path_frames_from_image)
+            break

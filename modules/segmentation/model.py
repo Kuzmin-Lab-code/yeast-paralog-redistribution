@@ -137,4 +137,3 @@ class SegmentationModel(pl.LightningModule):
 
         self.unfreeze()
         return predictions, ys
-
