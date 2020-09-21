@@ -213,6 +213,8 @@ def plot_pca(
     save_dir: Optional[str] = None,
     scale: bool = True,
     separate_replicates: bool = False,
+    replicate_legend_loc: int = 2,
+    label_legend_loc: int = 4,
 ):
     """
     Plot PCA of features array given metainfo data
@@ -223,6 +225,8 @@ def plot_pca(
     :param save_dir: dir to save image, do not save if None
     :param scale: bool, apply standard scaling before PCA
     :param separate_replicates: bool, mark replicates with shapes
+    :param label_legend_loc, location of label legend, in bottom-right corner by default (4)
+    :param replicate_legend_loc, location of replicate legend, in top-left corner by default (2)
     :return:
     """
 
@@ -311,7 +315,7 @@ def plot_pca(
                     f"Replicate {r} ({c})"
                     for r, c in zip(replicate_order, replicate_count)
                 ],
-                loc=2,
+                loc=replicate_legend_loc,
                 markerscale=1.5,
                 framealpha=0.8,
                 fancybox=True,
@@ -325,7 +329,7 @@ def plot_pca(
         legend_label = ax.legend(
             [lab[0] for lab in points_label if len(lab) != 0],
             [f"{r} ({c})" for r, c in zip(label_order, label_count)],
-            loc=4,
+            loc=label_legend_loc,
             markerscale=1.5,
             framealpha=0.8,
             fancybox=True,
