@@ -1,4 +1,5 @@
 import glob
+from abc import ABC
 
 import albumentations as A
 import numpy as np
@@ -18,9 +19,21 @@ from torch.utils.data import Dataset
 
 
 class DivPadding(DualTransform):
-    def __init__(self, divisibility: int = 32):
-        super().__init__()
+    def __init__(self, always_apply=True, p=1.0, divisibility: int = 32):
+        super().__init__(always_apply=always_apply, p=p)
         self.divisibility = divisibility
+
+    def get_transform_init_args_names(self):
+        return ["divisibility"]
+
+    def get_params_dependent_on_targets(self, params):
+        return params
+
+    def apply_to_bbox(self, bbox, **params):
+        return bbox
+
+    def apply_to_keypoint(self, keypoint, **params):
+        return keypoint
 
     def pad(self, img: ndarray, pad_last: bool = False):
         dim = np.array(img.shape)
@@ -61,6 +74,7 @@ class AnnotatedDataset(Dataset):
         self.divisibility = divisibility
         self.cache = cache
         self.subtract_background_noise = subtract_background_noise
+        self.original_shape = None
 
         fn_image = sorted(glob.glob(str(self.path / "input" / "Plate *" / "*.flex")))
         fn_label = sorted(
@@ -104,6 +118,8 @@ class AnnotatedDataset(Dataset):
         row = self.metainfo.iloc[item, :]
         image = read_np_pil(row["image"]).astype(np.float32)
         label = np.load(row["label"])
+
+        self.original_shape = image.shape
         # print(image.shape, label.shape)
         if self.subtract_background_noise:
             image -= self.background
@@ -113,4 +129,16 @@ class AnnotatedDataset(Dataset):
             image = standardize(image)
 
         transformed = self.transforms(image=image[..., None], mask=label)
-        return transformed["image"], transformed["mask"]
+        return transformed["image"].float(), transformed["mask"].float().unsqueeze(0)
+
+    def eval(self):
+        """
+        Switch off training augmentations
+        """
+        self.transforms = A.Compose([self.base_transforms])
+
+    def train(self):
+        """
+        Switch on training augmentations
+        """
+        self.transforms = A.Compose([self.aug_transforms, self.base_transforms])

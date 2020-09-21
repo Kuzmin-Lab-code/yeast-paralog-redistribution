@@ -20,7 +20,7 @@ def min_max_scale(img: Array) -> Array:
     :return: scaled image
     """
     mi, ma = img.min(), img.max()
-    return (img - mi) / (ma - mi)
+    return (img - mi) / (ma - mi + 1e-8)
 
 
 def standardize(img: Array) -> Array:

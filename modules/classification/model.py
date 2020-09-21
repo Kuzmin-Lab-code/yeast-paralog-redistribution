@@ -123,10 +123,16 @@ class LitModel(pl.LightningModule):
 
     def on_validation_epoch_start(self):
         for dl in self.trainer.val_dataloaders:
-            dl.dataset.eval()
+            try:
+                dl.dataset.eval()
+            except AttributeError:
+                dl.dataset.dataset.eval()
 
     def on_train_epoch_start(self):
-        self.trainer.train_dataloader.dataset.train()
+        try:
+            self.trainer.train_dataloader.dataset.train()
+        except AttributeError:
+            self.trainer.train_dataloader.dataset.dataset.train()
 
     def inference(self, loader):
         self.freeze()
