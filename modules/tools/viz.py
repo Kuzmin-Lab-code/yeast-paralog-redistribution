@@ -54,7 +54,7 @@ def crop(
 
 def plot_segmentation_overlay(
     img: Array,
-    seg: Array,
+    seg: Optional[Array] = None,
     crop_parameters: Optional[Tuple[int]] = None,
     size: int = 5,
     log_scale: bool = False,
@@ -68,6 +68,9 @@ def plot_segmentation_overlay(
     :param log_scale: log transform (by default just min-max scale)
     :return:
     """
+    # Consider image a segmentation
+    if seg is None:
+        seg = img
     nlabel = len(np.unique(seg))
     np.random.seed(30)
     colors = [tuple(map(tuple, np.random.rand(1, 3)))[0] for i in range(0, nlabel)]
@@ -90,6 +93,7 @@ def plot_by_side(
     titles: Optional[List[str]] = None,
     crop_parameters: Optional[Tuple[int]] = None,
     size: int = 5,
+    cmap='viridis',
 ):
     """
     Plot several images side by side
@@ -97,6 +101,7 @@ def plot_by_side(
     :param titles: list of titles, optional
     :param crop_parameters: (x, y, s), optional
     :param size: axes size
+    :param cmap: pyplot colormap
     :return:
     """
     ratio = images[0].shape[0] / images[0].shape[1]
@@ -105,7 +110,7 @@ def plot_by_side(
     for i, (img, ax) in enumerate(zip(images, axes)):
         if crop_parameters is not None:
             img = crop(img, *crop_parameters)
-        ax.imshow(img)
+        ax.imshow(img, cmap=cmap)
         if titles is not None:
             ax.set_title(titles[i])
     clean_show(axes)

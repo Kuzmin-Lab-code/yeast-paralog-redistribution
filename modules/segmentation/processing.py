@@ -1,13 +1,18 @@
 import glob
 import sys
-from pathlib import Path
 
 import numpy as np
 from scipy.ndimage.morphology import distance_transform_edt
 from skimage.measure import label
 from skimage.morphology import binary_erosion, erosion
-from tools.typing import Array, PathT
 from tqdm.auto import tqdm
+
+
+from skimage.morphology import remove_small_holes, remove_small_objects
+from scipy.ndimage.measurements import center_of_mass
+from skimage.segmentation import watershed
+
+from tools.typing import *
 
 
 def semantic_to_binary(segmentation: Array) -> Array:
@@ -50,7 +55,7 @@ def process_stencil(stencil: Array, distance_map: Array, alpha: float = 0.8) -> 
     """
     assert 0 < alpha < 1, "Alpha should be a float between 0 and 1"
     assert (
-        stencil.shape == distance_map.shape
+            stencil.shape == distance_map.shape
     ), f"Arrays should have the same shape, not {stencil.shape} and {distance_map.shape}"
     stencil = binary_erosion(stencil)  # Erode stencil
     stencil_dt = distance_map.copy()  # Copy distance transform (dt) array
@@ -61,10 +66,10 @@ def process_stencil(stencil: Array, distance_map: Array, alpha: float = 0.8) -> 
 
 
 def make_distance_transform(
-    segmentation: Array,
-    alpha: float = 0.8,
-    clip: int = 20,
-    scale_by_stencil: bool = False,
+        segmentation: Array,
+        alpha: float = 0.8,
+        clip: int = 20,
+        scale_by_stencil: bool = False,
 ) -> Array:
     """
     Makes distance transform from a segmentation array
@@ -118,12 +123,12 @@ def make_distance_transform(
 
 
 def make_distance_transform_dir(
-    input_dir: PathT,
-    output_dir: PathT,
-    skip_existed: bool = True,
-    alpha: float = 0.8,
-    clip: int = 20,
-    scale_by_stencil: bool = False,
+        input_dir: PathT,
+        output_dir: PathT,
+        skip_existed: bool = True,
+        alpha: float = 0.8,
+        clip: int = 20,
+        scale_by_stencil: bool = False,
 ) -> None:
     """
     Copies to
@@ -156,3 +161,31 @@ def make_distance_transform_dir(
         except:
             print(f"Unexpected error in {fn}:", sys.exc_info()[0])
             raise
+
+
+def watershed_distance_map(distance_map: ndarray, seed_threshold: float = 0.8, mask_threshold: float = 0.5,
+                           region_assurance: bool = True, small_size_threshold: int = 32) -> ndarray:
+    """
+    Use watershed to binarize distance map
+    :param distance_map: distance map either from algorithm or neural network output
+    :param seed_threshold: threshold for watershed seeds
+    :param mask_threshold: threshold for mask
+    :param region_assurance: bool, preserves all the regions in mask
+    :param small_size_threshold: size threshold to filter shall objects and holes
+    :return: object segmentation
+    """
+    seed = remove_small_objects(distance_map > seed_threshold, small_size_threshold)
+    mask = remove_small_holes(distance_map > mask_threshold, small_size_threshold)
+
+    if region_assurance:
+        uncertain_labels = label(mask)
+        for lbl in np.unique(uncertain_labels)[1:]:
+            stencil = np.array(uncertain_labels == lbl)
+            if np.all(np.logical_not(np.logical_and(stencil, seed))):
+                com = list(map(int, center_of_mass(stencil)))
+                seed[com[0], com[1]] = True
+
+    # Use minus, because watershed labels lowest values first
+    ws = watershed(-distance_map, markers=label(seed), mask=mask, watershed_line=True)
+    ws = remove_small_objects(ws, small_size_threshold)
+    return ws

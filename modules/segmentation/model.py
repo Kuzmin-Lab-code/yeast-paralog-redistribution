@@ -127,13 +127,14 @@ class SegmentationModel(pl.LightningModule):
             for x, y in iterator:
                 out, loss, acc = self.out_loss_acc((x.cuda(), y.cuda()))
                 accuracy.append(acc)
-                iterator.set_postfix({"acc": np.mean(acc) * 100})
+                iterator.set_postfix({"acc": np.mean(accuracy) * 100})
 
-                predictions.append(out.cpu().numpy())
-                ys.append(y.cpu().numpy())
+                predictions.append(loader.dataset.crop_to_original(out.cpu()).numpy())
+                ys.append(loader.dataset.crop_to_original(y.cpu()).numpy())
 
         predictions = np.concatenate(predictions)
         ys = np.concatenate(ys)
 
         self.unfreeze()
         return predictions, ys
+

@@ -16,6 +16,8 @@ from tools.image import (
 )
 from tools.typing import *
 from torch.utils.data import Dataset
+import torch
+from dataclasses import dataclass, field
 
 
 class DivPadding(DualTransform):
@@ -56,80 +58,80 @@ class DivPadding(DualTransform):
         return self.pad(img, pad_last=True)
 
 
-class AnnotatedDataset(Dataset):
+class BaseDataset(Dataset):
     def __init__(
-        self,
-        path: PathT = "../data/images/segmentation/",
-        metainfo: PathT = "../data/segmentation_dataset_metainfo.csv",
-        log: bool = True,
-        std: bool = True,
-        divisibility: int = 32,
-        cache: bool = False,
-        subtract_background_noise: bool = True,
-        transforms: List[Transform] = [],
+            self,
+            path: PathT,
+            log: bool = True,
+            std: bool = True,
+            cache: bool = False,
+            divisibility: int = 32,
+            subtract_background_noise: bool = True,
+            transforms: Optional[List[Transform]] = None
     ):
+        super().__init__()
         self.path = Path(path)
         self.log = log
         self.std = std
-        self.divisibility = divisibility
         self.cache = cache
+        self.divisibility = divisibility
         self.subtract_background_noise = subtract_background_noise
+        self.files = self._get_filenames()
         self.original_shape = None
 
-        fn_image = sorted(glob.glob(str(self.path / "input" / "Plate *" / "*.flex")))
-        fn_label = sorted(
-            glob.glob(str(self.path / "labels_dt" / "R2_Plate_*" / "*.npy"))
-        )
-        # print(len(fn_image), len(fn_label))
-        genes = [f.split("/")[-1].split("_")[0] for f in fn_image]
-
-        self.metainfo = pd.DataFrame(
-            {
-                "image": fn_image,
-                "label": fn_label,
-                "gene": genes,
-            }
-        )
-
-        metainfo_gene = pd.read_csv(metainfo, names=["gene", "plate", "row", "column"])
-        self.metainfo = self.metainfo.merge(metainfo_gene, on="gene", how="left")
+        self.aug_transforms = transforms
         self.base_transforms = A.Compose(
             [
                 DivPadding(divisibility=self.divisibility),
                 T.ToTensorV2(),
             ]
         )
-        self.aug_transforms = A.Compose(transforms)
-        self.transforms = A.Compose([self.aug_transforms, self.base_transforms])
+        self.transforms = self.base_transforms
+        self.background = self._get_background()
+        self.train()
 
-        # Background subtraction
+    def _get_filenames(self) -> List[str]:
+        raise NotImplementedError
+
+    def __getitem__(self, item):
+        return NotImplementedError
+
+    def __len__(self) -> int:
+        return len(self.files)
+
+    def _get_background(self) -> ndarray:
         if self.subtract_background_noise:
-            bg_fn = self.path / "background.npy"
+            bg_fn = Path(self.path) / "background.npy"
             if bg_fn.exists():
                 self.background = np.load(bg_fn)
             else:
                 print("Background file does not exist, creating...")
-                self.background = calculate_readout_noise(return_images=False)
+                self.background = calculate_readout_noise(self.files, return_images=False)
+                np.save(bg_fn, self.background)
+        else:
+            self.background = 0
+        return self.background
 
-    def __len__(self) -> int:
-        return len(self.metainfo)
-
-    def __getitem__(self, item: int) -> Tuple[Array, Array]:
-        row = self.metainfo.iloc[item, :]
-        image = read_np_pil(row["image"]).astype(np.float32)
-        label = np.load(row["label"])
-
-        self.original_shape = image.shape
-        # print(image.shape, label.shape)
+    def _normalize_image(self, image):
+        if self.original_shape is None:
+            self.original_shape = image.shape
         if self.subtract_background_noise:
             image -= self.background
         if self.log:
             image = log_transform_scale(image)
         if self.std:
             image = standardize(image)
+        return image
 
-        transformed = self.transforms(image=image[..., None], mask=label)
-        return transformed["image"].float(), transformed["mask"].float().unsqueeze(0)
+    def crop_to_original(self, x):
+        if self.original_shape is None:
+            raise ValueError('Original shape is not known, get some items first')
+        slices = tuple(slice(s) for s in self.original_shape)
+        # Pad dimensions
+        # NB! Assuming torch channel first
+        for _ in range(len(slices), len(x.shape)):
+            slices = (slice(None), ) + slices
+        return x[slices]
 
     def eval(self):
         """
@@ -142,3 +144,58 @@ class AnnotatedDataset(Dataset):
         Switch on training augmentations
         """
         self.transforms = A.Compose([self.aug_transforms, self.base_transforms])
+
+
+class AnnotatedDataset(BaseDataset):
+    def __init__(
+        self,
+        path: PathT = "../data/images/segmentation/",
+        metainfo: PathT = "../data/segmentation_dataset_metainfo.csv",
+        transforms: Optional[List[Transform]] = None,
+        *args,
+        **kwargs
+    ):
+        super().__init__(path=path, transforms=transforms, *args, **kwargs)
+
+        fn_label = sorted(
+            glob.glob(str(self.path / "labels_dt" / "R2_Plate_*" / "*.npy"))
+        )
+        # print(len(fn_image), len(fn_label))
+        genes = [f.split("/")[-1].split("_")[0] for f in self.files]
+
+        self.metainfo = pd.DataFrame(
+            {
+                "image": self.files,
+                "label": fn_label,
+                "gene": genes,
+            }
+        )
+
+        metainfo_gene = pd.read_csv(metainfo, names=["gene", "plate", "row", "column"])
+        self.metainfo = self.metainfo.merge(metainfo_gene, on="gene", how="left")
+
+    def _get_filenames(self) -> List[str]:
+        return sorted(glob.glob(str(self.path / "input" / "Plate *" / "*.flex")))
+
+    def __getitem__(self, item: int) -> Tuple[Array, Array]:
+        row = self.metainfo.iloc[item, :]
+        image = read_np_pil(row["image"]).astype(np.float32)
+        label = np.load(row["label"])
+        image = self._normalize_image(image)
+        transformed = self.transforms(image=image[..., None], mask=label)
+        return transformed["image"].float(), transformed["mask"].float().unsqueeze(0)
+
+
+class ExperimentDataset(BaseDataset):
+    def __init__(self, path: str = "../data/images/experiment", *args, **kwargs):
+        super().__init__(path=path, *args,  **kwargs)
+
+    def _get_filenames(self) -> List[str]:
+        return sorted(glob.glob(str(self.path / '**/*.flex')))
+
+    def __getitem__(self, item):
+        image = read_np_pil(self.files[item]).astype(np.float32)
+        image = self._normalize_image(image)
+        image = self.base_transforms(image=image[..., None])['image']
+        label = torch.zeros_like(image)  # fill in label with 0 for compatibility
+        return image, label
