@@ -3,6 +3,7 @@ from typing import *
 
 from albumentations import BasicTransform as Transform
 from numpy import ndarray
+from omegaconf import DictConfig
 from pandas.core.frame import DataFrame
 from torch import Tensor
 

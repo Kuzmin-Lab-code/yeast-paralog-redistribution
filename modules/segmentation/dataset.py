@@ -1,6 +1,4 @@
 import glob
-from abc import ABC
-from dataclasses import dataclass, field
 
 import albumentations as A
 import numpy as np
@@ -21,6 +19,12 @@ from torch.utils.data import Dataset
 
 
 class DivPadding(DualTransform):
+    """
+    Pads image and mask to be divisible by some value
+    NB! PadIfNeeded has the same functionality but only in dev version,
+    so this class will be deprecated after the next Albumentations release
+    """
+
     def __init__(self, always_apply=True, p=1.0, divisibility: int = 32):
         super().__init__(always_apply=always_apply, p=p)
         self.divisibility = divisibility
@@ -91,6 +95,9 @@ class BaseDataset(Dataset):
         self.train()
 
     def _get_filenames(self) -> List[str]:
+        """
+        :return: list of images to iterate over
+        """
         raise NotImplementedError
 
     def __getitem__(self, item):
