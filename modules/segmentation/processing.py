@@ -9,9 +9,10 @@ from scipy.ndimage.morphology import distance_transform_edt
 from skimage.measure import label, regionprops
 from skimage.morphology import binary_erosion, remove_small_holes, remove_small_objects
 from skimage.segmentation import watershed
-from tools.image import read_np_pil
-from tools.typing import *
 from tqdm.auto import tqdm
+
+from ..tools.image import read_np_pil
+from ..tools.typing import *
 
 
 def semantic_to_binary(segmentation: Array) -> Array:

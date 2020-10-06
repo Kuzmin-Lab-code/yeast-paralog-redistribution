@@ -1,7 +1,8 @@
 import numpy as np
 from PIL import Image
-from tools.typing import *
 from tqdm.auto import tqdm
+
+from .typing import *
 
 
 def read_np_pil(path: PathT) -> ndarray:

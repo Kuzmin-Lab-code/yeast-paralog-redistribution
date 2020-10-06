@@ -77,35 +77,6 @@ class LitModel(pl.LightningModule):
 
         return result
 
-    # def validation_end(self, outputs):
-    #     # print(outputs)
-    #     # avg_loss = torch.stack([x['val_loss'] for x in outputs]).mean()
-    #     # avg_acc = torch.stack([x['val_acc'] for x in outputs]).mean()
-    #
-    #     avg_loss = outputs['val_loss'].mean()
-    #     avg_acc = outputs['val_acc'].mean()
-    #
-    #     return {
-    #         'val_loss': avg_loss,
-    #         'val_acc': avg_acc,
-    #         'progress_bar': {'val_loss': avg_loss, 'val_acc': avg_acc}}
-
-    # def test_step(self, batch, batch_idx):
-    #     x, y = batch
-    #     features = self.model.network(x)
-    #     out = self.model.fc(features)
-    #     loss = self.criterion(out, y)
-    #
-    #     return {"loss": loss.unsqueeze(0), "features": features, "pred": out, "y": y}
-    #
-    # def test_end(self, outputs):
-    #     """
-    #     Aggregate test loss and predictions
-    #     """
-    #     stacked = {k: torch.cat([x[k] for x in outputs], 0) for k in outputs[0].keys()}
-    #     stacked["loss"] = stacked["loss"].mean()
-    #     return stacked
-
     def configure_optimizers(self):
         optimizers = [torch.optim.Adam(self.network.parameters(), lr=3e-4)]
         # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=50)

@@ -1,0 +1,36 @@
+name: yeast-protein-loc
+
+hydra:
+  run:
+    dir: ./results/outputs/${now:%Y-%m-%d_%H-%M-%S}/${model.segmentation.encoder_name}
+
+experiment:
+  replicates: 3
+
+path:
+  results: ./results
+  data: ./data
+  metainfo: ./data/metainfo.csv
+  frames: ./data/frames
+  images: ./data/images
+  segmentation:
+    input: ./data/images/segmentation/input
+    labels: ./data/images/segmentation/labels
+    labels_dt: ./data/images/segmentation/labels_dt
+    background: ./data/images/segmentation/background.npy
+  experiment:
+    input: ./data/images/experiment/input
+    labels: ./data/images/experiment/labels
+
+
+model:
+  segmentation:
+    encoder_name: resnet34
+    in_channels: 1
+    classes: 1
+    encoder_weights: None
+    activation: sigmoid
+  classification:
+    n_classes: 182
+    metric_coefficient: 0.0
+    seed: 15

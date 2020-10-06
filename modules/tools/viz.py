@@ -9,9 +9,12 @@ from skimage.color import label2rgb
 from sklearn.decomposition import PCA
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
-from tools.image import *
-from tools.metrics import *
-from tools.typing import *
+from tqdm.auto import tqdm
+
+# from modules.analysis.abundance import relative_abundance_changes
+from .image import *
+from .metrics import *
+from .typing import *
 
 
 def clean_show(ax):
@@ -215,11 +218,12 @@ def plot_pca(
     metainfo: DataFrame,
     figsize: int = 7,
     use_seaborn: bool = False,
-    save_dir: Optional[str] = None,
+    save_path: Optional[str] = None,
     scale: bool = True,
     separate_replicates: bool = False,
     replicate_legend_loc: int = 2,
     label_legend_loc: int = 4,
+    fmt: str = "pdf",
 ):
     """
     Plot PCA of features array given metainfo data
@@ -227,11 +231,12 @@ def plot_pca(
     :param metainfo: metainfo about each frame
     :param figsize: figure size
     :param use_seaborn: bool, produce basic plot with seaborn
-    :param save_dir: dir to save image, do not save if None
+    :param save_path: dir to save image, do not save if None
     :param scale: bool, apply standard scaling before PCA
     :param separate_replicates: bool, mark replicates with shapes
     :param label_legend_loc, location of label legend, in bottom-right corner by default (4)
     :param replicate_legend_loc, location of replicate legend, in top-left corner by default (2)
+    :param fmt, format to save
     :return:
     """
 
@@ -347,22 +352,73 @@ def plot_pca(
     ax.set_xlabel("PCA 0")
     ax.set_ylabel("PCA 1")
 
-    if save_dir is not None:
-        save_dir = Path(save_dir)
-        save_dir.mkdir(parents=True, exist_ok=True)
+    if save_path is not None:
+        save_path = Path(save_path)
+        save_path.mkdir(parents=True, exist_ok=True)
         pair = "-".join(np.unique(metainfo.GFP))
-        plt.savefig(save_dir / f"{pair}.png", bbox_inches="tight")
+        plt.tight_layout()
+        plt.savefig(save_path / f"{pair}.{fmt}", bbox_inches="tight")
 
     return fig, ax
 
 
-def plot_abundance_boxplots(
-    metainfo_pair,
-    log_scale=True,
-    separate_replicates=True,
-    save=False,
-    save_path="../results/abundance/",
+def plot_pca_all_pairs(
+    meta_path: str = "./data/meta/",
+    features_path: str = "./results/predictions-arc/",
+    figsize: int = 7,
+    use_seaborn: bool = False,
+    save_path: str = "./results/pca",
+    scale: bool = True,
+    separate_replicates: bool = False,
+    replicate_legend_loc: int = 2,
+    label_legend_loc: int = 4,
+    fmt: str = "pdf",
 ):
+    metainfo = pd.read_csv(f"{meta_path}/metainfo.csv")
+
+    for pair in tqdm(np.unique(metainfo.pairs)):
+        if pair.startswith("control"):
+            continue
+        metainfo_pair = pd.read_csv(
+            f"{meta_path}/metainfo_replicate*_{pair}.csv", index_col=0
+        )
+        features_pair = pd.read_csv(
+            f"{features_path}/{pair}-features.csv", index_col=0
+        ).drop("label", axis=1)
+
+        fig, ax = plot_pca(
+            features=features_pair.values,
+            metainfo=metainfo_pair,
+            figsize=figsize,
+            use_seaborn=use_seaborn,
+            save_path=save_path,
+            scale=scale,
+            separate_replicates=separate_replicates,
+            replicate_legend_loc=replicate_legend_loc,
+            label_legend_loc=label_legend_loc,
+            fmt=fmt,
+        )
+        plt.close(fig)
+
+
+def plot_abundance_boxplots(
+    metainfo_pair: DataFrame,
+    log_scale: bool = True,
+    separate_replicates: bool = True,
+    save: bool = False,
+    save_path: PathT = "../results/abundance/",
+    fmt: str = "pdf",
+):
+    """
+    Plots abundance boxplots for gene pair side by side
+    :param metainfo_pair: dataframe with abundance scores
+    :param log_scale: scale y in log
+    :param separate_replicates: separate boxplots for each replicate
+    :param save: save figure
+    :param save_path: where to save figure
+    :param fmt: format to save figure
+    :return:
+    """
     fig, axes = plt.subplots(ncols=2, figsize=(12, 4), sharey=True)
     pair = np.unique(metainfo_pair.GFP)
     for i, (gene, ax) in enumerate(zip(pair, axes)):
@@ -378,22 +434,35 @@ def plot_abundance_boxplots(
         ax.set_title(gene)
         if log_scale:
             ax.set(yscale="log")
+            ax.set_ylim(bottom=1)
     plt.tight_layout()
     if save:
+        Path(save_path).mkdir(parents=True, exist_ok=True)
         pair = "-".join(pair)
-        plt.savefig(f"{save_path}/{pair}.png")
-        fig.clear()
+        name = f"{save_path}/{pair}.{fmt}"
+        plt.tight_layout()
+        plt.savefig(name)
+        # fig.clear()
+        plt.close(fig)
     else:
         plt.show()
 
 
-def plot_relative_changes(relative_changes: DataFrame):
+def plot_relative_changes(
+    relative_changes: Optional[DataFrame] = None,
+    offset_thr: float = 1.0,
+    *args,
+    **kwargs,
+):
     """
     Plot relative_abundance_changes() output as a boxplot
     :param relative_changes:
+    :param offset_thr: threshold to highlight
     :return:
     """
     fig, ax = plt.subplots(figsize=(15, 5))
+    # if relative_changes is None:
+    #     relative_changes = relative_abundance_changes(*args, **kwargs)
     relative_changes = relative_changes.dropna()
     coords = np.log(relative_changes["ratio"])
     sns.stripplot(coords, linewidth=1, ax=ax, jitter=0.2)
@@ -406,7 +475,7 @@ def plot_relative_changes(relative_changes: DataFrame):
             relative_changes.replicate.tolist(),
             c.get_offsets(),
         ):
-            if offset[0] < -1 or offset[0] > 1:
+            if offset[0] < -offset_thr or offset[0] > offset_thr:
                 name = f"{name} (R{replicate[-1]})"
                 ax.annotate(name, offset)
                 interesting.append(name)

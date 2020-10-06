@@ -1,9 +1,10 @@
 import warnings
 
 import torch
-from tools.typing import *
 from torch import nn as nn
 from torch.nn import functional as F
+
+from ..tools.typing import *
 
 warnings.filterwarnings("ignore")
 

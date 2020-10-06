@@ -1,5 +1,6 @@
 import numpy as np
-from tools.typing import ndarray
+
+from .typing import ndarray
 
 
 def accuracy(y_true: ndarray, y_pred: ndarray, top: int = 1) -> ndarray:
