@@ -61,7 +61,7 @@ class FramesDataset(Dataset):
         self,
         path_data: str = "../data",
         dir_frames: str = "frames",
-        file_metainfo: str = "metainfo.csv",
+        file_metainfo: str = "meta/metainfo.csv",
         replicate: Union[str, int] = "*",
         fmt: str = "npy",
         validation_field: Union[int, None] = 4,
