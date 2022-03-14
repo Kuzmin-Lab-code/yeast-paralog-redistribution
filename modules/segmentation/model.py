@@ -19,6 +19,7 @@ class SegmentationModel(pl.LightningModule):
         classes: int = 1,
         encoder_weights: Optional[str] = None,
         activation: Optional[str] = "sigmoid",
+        criterion: nn.Module = nn.BCELoss(),
         **kwargs
     ):
         super().__init__()
@@ -32,8 +33,8 @@ class SegmentationModel(pl.LightningModule):
             **kwargs
         )
 
-        self.criterion = nn.BCELoss() if classes == 1 else nn.NLLLoss()
-        self.accuracy = pl.metrics.Accuracy(num_classes=classes)
+        self.criterion = criterion
+        self.accuracy = pl.metrics.Accuracy(num_classes=1)
 
     def forward(self, x):
         self.network(x)
@@ -43,7 +44,7 @@ class SegmentationModel(pl.LightningModule):
         out = self.network(x)
         loss = self.criterion(out, y)
         # TODO implement for multiclass?
-        acc = self.accuracy(torch.round(out), torch.round(y))
+        acc = self.accuracy(torch.round(out[:, :1, ...]), (y > 0.5).int())
         return out, loss, acc
 
     def training_step(self, batch, batch_idx):
@@ -85,15 +86,21 @@ class SegmentationModel(pl.LightningModule):
                 #     'target': [wandb.Image(y) for y in batch[1].cpu().numpy()],
                 #     'output': [wandb.Image(o) for o in out.cpu().numpy()],
                 # })
-                self.logger.experiment.log(
-                    {
-                        "images": [
-                            wandb.Image(batch[0][0].cpu().numpy(), caption="input"),
-                            wandb.Image(batch[1][0].cpu().numpy(), caption="target"),
-                            wandb.Image(out[0].cpu().numpy(), caption="output"),
-                        ],
-                    }
-                )
+                log = {
+                    "images": [
+                        wandb.Image(batch[0][0].cpu().numpy(), caption="input"),
+                        wandb.Image(batch[1][0].cpu().numpy() > 0, caption="target"),
+                        wandb.Image(out[0, 0].cpu().numpy(), caption="output"),
+                    ],
+                }
+                if out.shape[1] > 1:
+                    log["images"].append(
+                        wandb.Image(
+                            np.moveaxis(out[0, 1:].cpu().numpy(), 0, -1),
+                            caption="4colors",
+                        )
+                    )
+                self.logger.experiment.log(log)
 
         return result
 
