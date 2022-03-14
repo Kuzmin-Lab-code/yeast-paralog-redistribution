@@ -1,11 +1,12 @@
 import numpy as np
 import pytorch_lightning as pl
 import torch
-from classification.loss import ArcFaceLoss, ArcMarginProductPlain
-from classification.network import resnet18
 from pytorch_lightning.metrics import Accuracy
 from torch import nn
 from tqdm.auto import tqdm
+
+from modules.classification.loss import ArcFaceLoss, ArcMarginProductPlain
+from modules.classification.network import resnet18
 
 
 class LitModel(pl.LightningModule):
@@ -15,6 +16,7 @@ class LitModel(pl.LightningModule):
         criterion: nn.Module = nn.CrossEntropyLoss(),
         metric_criterion: nn.Module = ArcFaceLoss(),
         metric_coefficient: float = 0.25,
+        scale_factor: float = 1.0,
         seed: int = 15,
     ):
         super().__init__()
@@ -29,6 +31,7 @@ class LitModel(pl.LightningModule):
         self.metric_coefficient = metric_coefficient
         # Metrics
         self.accuracy = Accuracy(num_classes=self.network.n_classes)
+        self.scale_factor = scale_factor
 
     def forward(self, x):
         return self.network(x)
@@ -36,13 +39,18 @@ class LitModel(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         x, y = batch
 
+        if self.scale_factor != 1:
+            x = torch.nn.functional.interpolate(
+                x, scale_factor=self.scale_factor, mode="bicubic"
+            )
+
         features = self.network.features(x)
         out = self.network.fc(features)
         metric_out = self.metric(features)
+        clf_loss = self.criterion(out, y)
 
         if self.metric_coefficient > 0:
             metric_loss = self.metric_criterion(metric_out, y)
-            clf_loss = self.criterion(out, y)
 
             loss = (
                 self.metric_coefficient * metric_loss
@@ -53,7 +61,7 @@ class LitModel(pl.LightningModule):
             result.log("clf_loss", clf_loss)
             result.log("metric_loss", metric_loss)
         else:
-            loss = self.criterion(out, y)
+            loss = clf_loss
             result = pl.TrainResult(minimize=loss)
 
         acc = self.accuracy(out.argmax(1), y)
@@ -65,6 +73,11 @@ class LitModel(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         x, y = batch
+
+        if self.scale_factor != 1:
+            x = torch.nn.functional.interpolate(
+                x, scale_factor=self.scale_factor, mode="bicubic"
+            )
 
         out = self(x)
         loss = self.criterion(out, y)
@@ -119,6 +132,12 @@ class LitModel(pl.LightningModule):
         with torch.no_grad():
             iterator = tqdm(loader)
             for x, y in iterator:
+
+                if self.scale_factor != 1:
+                    x = torch.nn.functional.interpolate(
+                        x, scale_factor=self.scale_factor, mode="bicubic"
+                    )
+
                 fts = self.network.features(x.cuda())
                 out = self.network.fc(fts)
 

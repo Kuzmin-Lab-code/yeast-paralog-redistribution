@@ -1,5 +1,5 @@
 import hydra
-from modules.tools.typing import *
+from modules.tools.types import *
 from omegaconf import DictConfig, OmegaConf
 
 

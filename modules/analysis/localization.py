@@ -16,7 +16,7 @@ from sklearn.mixture import GaussianMixture
 from sklearn.model_selection import KFold
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
-from tools.typing import List, Union
+from modules.tools.types import *
 from tqdm.auto import tqdm, trange
 
 Array = Union[np.ndarray]

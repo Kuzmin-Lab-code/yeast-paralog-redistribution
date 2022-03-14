@@ -2,7 +2,7 @@ import numpy as np
 from PIL import Image
 from tqdm.auto import tqdm
 
-from .typing import *
+from modules.tools.types import *
 
 
 def read_np_pil(path: PathT) -> ndarray:

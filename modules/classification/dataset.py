@@ -1,5 +1,4 @@
 import glob
-from pathlib import Path
 
 import albumentations as A
 import numpy as np
@@ -7,7 +6,7 @@ import pandas as pd
 from albumentations.pytorch import transforms as T
 from torch.utils.data import Dataset, Sampler, SubsetRandomSampler
 
-from ..tools.typing import *
+from modules.tools.types import *
 
 
 def prepare_metainfo_labels(metainfo: pd.DataFrame) -> pd.DataFrame:

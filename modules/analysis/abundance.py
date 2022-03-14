@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from tqdm.auto import tqdm
 
-from modules.tools.typing import *
+from modules.tools.types import *
 from modules.tools.viz import plot_abundance_boxplots
 
 

@@ -12,9 +12,9 @@ from sklearn.preprocessing import StandardScaler
 from tqdm.auto import tqdm
 
 # from modules.analysis.abundance import relative_abundance_changes
-from .image import *
-from .metrics import *
-from .typing import *
+from modules.tools.image import *
+from modules.tools.metrics import *
+from modules.tools.types import *
 
 
 def clean_show(ax):
