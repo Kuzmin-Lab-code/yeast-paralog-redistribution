@@ -159,13 +159,21 @@ class AnnotatedDataset(BaseDataset):
         path: PathT = "../data/images/segmentation/",
         metainfo: PathT = "../data/segmentation_dataset_metainfo.csv",
         transforms: Optional[List[Transform]] = None,
+        distance_transform: bool = True,
         *args,
         **kwargs
     ):
         super().__init__(path=path, transforms=transforms, *args, **kwargs)
 
         fn_label = sorted(
-            glob.glob(str(self.path / "labels_dt" / "R2_Plate_*" / "*.npy"))
+            glob.glob(
+                str(
+                    self.path
+                    / ("labels_dt" if distance_transform else "labels")
+                    / "R2_Plate_*"
+                    / "*.npy"
+                )
+            )
         )
         # print(len(fn_image), len(fn_label))
         genes = [f.split("/")[-1].split("_")[0] for f in self.files]
