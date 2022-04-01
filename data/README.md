@@ -19,7 +19,10 @@ Data for training (images, frames, metainfo)
 |   |   |   +-- R2_Plate_2
 |   |   |   +-- ...    
 |   +-- classification
+|   |   +-- input
+|   |   +-- labels
 +-- frames
++-- meta
 ```
 
 
