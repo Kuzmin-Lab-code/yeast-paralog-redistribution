@@ -6,6 +6,8 @@ import pandas as pd
 import torch
 from albumentations import DualTransform
 from albumentations.pytorch import transforms as T
+from torch.utils.data import Dataset
+
 from modules.tools.image import (
     calculate_readout_noise,
     log_transform_scale,
@@ -13,7 +15,6 @@ from modules.tools.image import (
     standardize,
 )
 from modules.tools.types import *
-from torch.utils.data import Dataset
 
 
 class DivPadding(DualTransform):

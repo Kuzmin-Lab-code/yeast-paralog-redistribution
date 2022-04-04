@@ -374,7 +374,9 @@ def plot_pca_all_pairs(
     label_legend_loc: int = 4,
     fmt: str = "pdf",
 ):
-    metainfo = pd.read_csv(f"{meta_path}/metainfo.csv")
+    metainfo = pd.read_csv(
+        f"{meta_path}/metainfo.csv", index_col=0, dtype={"URL": object}
+    )
 
     for pair in tqdm(np.unique(metainfo.pairs)):
         if pair.startswith("control"):
