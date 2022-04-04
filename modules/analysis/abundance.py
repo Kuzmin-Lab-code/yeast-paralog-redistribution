@@ -1,5 +1,7 @@
 import numpy as np
 import pandas as pd
+from scipy.stats import pearsonr
+from sklearn.decomposition import PCA
 from tqdm.auto import tqdm
 
 from modules.tools.types import *
@@ -125,3 +127,68 @@ def relative_abundance_changes(
 
     results = pd.DataFrame(results)
     return results
+
+
+def calculate_pca_abundance_correlation(
+    pair: str,
+    features_path: str = "./results/predictions-arc",
+    meta_path: str = "./data/meta/",
+    split_by_gene: bool = True,
+) -> List[Dict[str, Any]]:
+    """
+    Calculate correlation between PCA and abundance scores for pair
+    :param pair: pair to calculate correlation for, e.g. "KIN1-KIN2"
+    :param features_path: path where features are stored in {pair}-features.csv files
+    :param meta_path: path to metadata
+    :param split_by_gene: split by gene in pair
+    :return: list of dictionaries {pair, [gene], Pearson's r, p-value, Pearson's r absolute}
+    """
+
+    features_pair = pd.read_csv(
+        f"{features_path}/{pair}-features.csv", index_col=0
+    ).drop("label", axis=1)
+    metainfo_pair = pd.read_csv(
+        f"{meta_path}/metainfo_replicate*_{pair}.csv", index_col=0
+    )
+
+    results = []
+    if split_by_gene:
+        for gene in metainfo_pair.GFP.unique():
+            mask = metainfo_pair.GFP == gene
+            pc0 = PCA(n_components=1).fit_transform(features_pair[mask]).flatten()
+            r, p = pearsonr(metainfo_pair.abundance[mask], pc0)
+            results.append(
+                {
+                    "pair": pair,
+                    "gene": gene,
+                    "n": mask.sum(),
+                    "r": r,
+                    "p": p,
+                    "rabs": np.abs(r),
+                }
+            )
+    else:
+        pc0 = PCA(n_components=1).fit_transform(features_pair).flatten()
+        r, p = pearsonr(metainfo_pair.abundance, pc0)
+        results.append({"pair": pair, "r": r, "n": len(pc0), "p": p, "rabs": np.abs(r)})
+    return results
+
+
+def calculate_pca_abundance_correlation_all_pairs(
+    meta_path: PathT = "./data/meta/",
+) -> DataFrame:
+    """
+    Calculate correlation between PCA and abundance scores for all pairs
+    :param meta_path: path to metadata
+    :return:
+    """
+    metainfo = pd.read_csv(
+        f"{meta_path}/metainfo.csv", sep=",", index_col=0, dtype={"URL": object}
+    ).reset_index()
+    results = []
+    for pair in tqdm(np.unique(metainfo.pairs)):
+        if pair.startswith("control"):
+            continue
+        res = calculate_pca_abundance_correlation(pair)
+        results.extend(res)
+    return pd.DataFrame(results)
