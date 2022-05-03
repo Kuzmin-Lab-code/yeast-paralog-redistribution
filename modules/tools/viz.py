@@ -260,8 +260,9 @@ def plot_pca(
     )
 
     label_order, label_count = np.unique(df.Label, return_counts=True)
-    label_order = label_order[[1, 0, 3, 2]]  # WT comes first
-    label_count = label_count[[1, 0, 3, 2]]  # WT comes first
+    if len(label_order) > 3:
+        label_order = label_order[[1, 0, 3, 2]]  # WT comes first
+        label_count = label_count[[1, 0, 3, 2]]  # WT comes first
     replicate_order, replicate_count = np.unique(df.Replicate, return_counts=True)
     fig, ax = plt.subplots(figsize=(figsize, figsize))
 
