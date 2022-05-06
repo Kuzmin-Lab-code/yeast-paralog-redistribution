@@ -221,6 +221,7 @@ def plot_pca(
     save_path: Optional[str] = None,
     scale: bool = True,
     separate_replicates: bool = False,
+    include_replicates: Optional[Tuple[int]] = None,
     replicate_legend_loc: int = 2,
     label_legend_loc: int = 4,
     fmt: str = "pdf",
@@ -234,6 +235,7 @@ def plot_pca(
     :param save_path: dir to save image, do not save if None
     :param scale: bool, apply standard scaling before PCA
     :param separate_replicates: bool, mark replicates with shapes
+    :param include_replicates: tuple of int, indices of replicates to include
     :param label_legend_loc, location of label legend, in bottom-right corner by default (4)
     :param replicate_legend_loc, location of replicate legend, in top-left corner by default (2)
     :param fmt, format to save
@@ -258,6 +260,10 @@ def plot_pca(
             "Replicate": metainfo.replicate.str.replace("replicate", ""),
         }
     )
+
+    if include_replicates is not None:
+        include_replicates = [str(i) for i in include_replicates]
+        df = df[df.Replicate.isin(include_replicates)]
 
     label_order, label_count = np.unique(df.Label, return_counts=True)
     if len(label_order) > 3:
