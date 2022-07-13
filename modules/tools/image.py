@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 from PIL import Image
 from tqdm.auto import tqdm
 
@@ -14,23 +15,42 @@ def read_np_pil(path: PathT) -> ndarray:
     return np.array(Image.open(path))
 
 
-def min_max_scale(img: Array) -> Array:
+def min_max_scale(
+    img: Array,
+    mi: Optional[float] = None,
+    ma: Optional[float] = None,
+    eps: float = 1e-8,
+) -> Array:
     """
     Scales image between 0 and 1
     :param img: image to scale
+    :param mi: optional min, calculated as img.min() if None
+    :param ma: optional max, calculated as img.max() if None
+    :param eps: numerical stability in denominator
     :return: scaled image
     """
-    mi, ma = img.min(), img.max()
-    return (img - mi) / (ma - mi + 1e-8)
+    if mi is None:
+        mi = img.min()
+    if ma is None:
+        ma = img.max()
+    return (img - mi) / (ma - mi + eps)
 
 
-def standardize(img: Array) -> Array:
+def standardize(
+    img: Array, mean: Optional[float] = None, std: Optional[float] = None
+) -> Array:
     """
     Standardize image (subtract mean, divide by std)
     :param img: image to standardize
+    :param mean: optional mean to subtract, calculated as img.mean() if None
+    :param std: optional std to divide, calculated as img.std() if None
     :return: standardized image
     """
-    return (img - img.mean()) / img.std()
+    if mean is None:
+        mean = img.mean()
+    if std is None:
+        std = img.std()
+    return (img - mean) / std
 
 
 def log_transform_scale(img: Array) -> Array:
@@ -39,7 +59,11 @@ def log_transform_scale(img: Array) -> Array:
     :param img: image to transform
     :return:
     """
-    tfm = np.log1p(img - img.min())
+    tfm = img - img.min()
+    if isinstance(img, ndarray):
+        tfm = np.log1p(tfm)
+    elif isinstance(img, Tensor):
+        tfm = torch.log1p(tfm)
     return min_max_scale(tfm)
 
 
