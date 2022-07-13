@@ -4,7 +4,6 @@ import albumentations as A
 import numpy as np
 import pandas as pd
 import torch
-from albumentations import DualTransform
 from albumentations.pytorch import transforms as T
 from torch.utils.data import Dataset
 
@@ -14,51 +13,8 @@ from modules.tools.image import (
     read_np_pil,
     standardize,
 )
+from modules.tools.transforms import get_base_transforms
 from modules.tools.types import *
-
-
-class DivPadding(DualTransform):
-    """
-    Pads image and mask to be divisible by some value
-    NB! PadIfNeeded has the same functionality but only in dev version,
-    so this class will be deprecated after the next Albumentations release
-    """
-
-    def __init__(self, always_apply=True, p=1.0, divisibility: int = 32):
-        super().__init__(always_apply=always_apply, p=p)
-        self.divisibility = divisibility
-
-    def get_transform_init_args_names(self):
-        return ["divisibility"]
-
-    def get_params_dependent_on_targets(self, params):
-        return params
-
-    def apply_to_bbox(self, bbox, **params):
-        return bbox
-
-    def apply_to_keypoint(self, keypoint, **params):
-        return keypoint
-
-    def pad(self, img: ndarray, pad_last: bool = False):
-        dim = np.array(img.shape)
-        if not pad_last:
-            dim = dim[:-1]
-        pad = np.ceil(dim / self.divisibility) * self.divisibility - dim
-        pad = [(0, int(p)) for p in pad]
-        if not pad_last:
-            pad += [(0,) * len(dim)]
-        # pad = np.stack([np.zeros_like(pad), pad[::-1]]).reshape(1, -1, order="F")[0]
-        # pad = list(pad.astype(int))
-        if np.allclose(pad, 0):
-            return img
-        return np.pad(img, pad, mode="reflect")
-
-    def apply(self, img: ndarray, **params):
-        return self.pad(img, pad_last=False)
-
-    def apply_to_mask(self, img: ndarray, **params):
-        return self.pad(img, pad_last=True)
 
 
 class BaseDataset(Dataset):
@@ -83,14 +39,10 @@ class BaseDataset(Dataset):
         self.original_shape = None
 
         self.aug_transforms = transforms
-        self.base_transforms = A.Compose(
-            [
-                DivPadding(divisibility=self.divisibility),
-                T.ToTensorV2(),
-            ]
-        )
+        self.base_transforms = get_base_transforms()
         self.transforms = self.base_transforms
         self.background = self._get_background()
+
         self.train()
 
     def _get_filenames(self) -> List[str]:
@@ -109,13 +61,13 @@ class BaseDataset(Dataset):
         if self.subtract_background_noise:
             bg_fn = Path(self.path) / "background.npy"
             if bg_fn.exists():
-                self.background = np.load(bg_fn)
+                self.background = np.load(bg_fn.as_posix())
             else:
                 print("Background file does not exist, creating...")
                 self.background = calculate_readout_noise(
                     self.files, return_images=False
                 )
-                np.save(bg_fn, self.background)
+                np.save(bg_fn.as_posix(), self.background)
         else:
             self.background = 0
         return self.background
@@ -162,9 +114,10 @@ class AnnotatedDataset(BaseDataset):
         transforms: Optional[List[Transform]] = None,
         distance_transform: bool = True,
         *args,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(path=path, transforms=transforms, *args, **kwargs)
+        print(f"Looking for data in {path}")
 
         fn_label = sorted(
             glob.glob(
@@ -187,19 +140,26 @@ class AnnotatedDataset(BaseDataset):
             }
         )
 
+        self.metainfo.gene = pd.Categorical(self.metainfo.gene)
+        self.metainfo["gene_id"] = self.metainfo.gene.cat.codes
+        self.n_classes = self.metainfo["gene_id"].max() + 1
+
         metainfo_gene = pd.read_csv(metainfo, names=["gene", "plate", "row", "column"])
         self.metainfo = self.metainfo.merge(metainfo_gene, on="gene", how="left")
 
     def _get_filenames(self) -> List[str]:
         return sorted(glob.glob(str(self.path / "input" / "Plate *" / "*.flex")))
 
-    def __getitem__(self, item: int) -> Tuple[Array, Array]:
-        row = self.metainfo.iloc[item, :]
+    def __getitem__(self, i: int) -> Dict[str, Tensor]:
+        row = self.metainfo.iloc[i, :]
+        mask = np.load(row["label"]).astype(np.float32)
         image = read_np_pil(row["image"]).astype(np.float32)
-        label = np.load(row["label"])
         image = self._normalize_image(image)
-        transformed = self.transforms(image=image[..., None], mask=label)
-        return transformed["image"].float(), transformed["mask"].float().unsqueeze(0)
+
+        item = self.transforms(image=image[..., None], mask=mask)
+        item["mask"] = item["mask"].float().unsqueeze(0)
+        item["label"] = torch.tensor(row["gene_id"]).long()
+        return item
 
 
 class ExperimentDataset(BaseDataset):
@@ -209,9 +169,10 @@ class ExperimentDataset(BaseDataset):
     def _get_filenames(self) -> List[str]:
         return sorted(glob.glob(str(self.path / "**/*.flex")))
 
-    def __getitem__(self, item):
-        image = read_np_pil(self.files[item]).astype(np.float32)
+    def __getitem__(self, i) -> Dict[str, Tensor]:
+        image = read_np_pil(self.files[i]).astype(np.float32)
         image = self._normalize_image(image)
-        image = self.base_transforms(image=image[..., None])["image"]
-        label = torch.zeros_like(image)  # fill in label with 0 for compatibility
-        return image, label
+        item = self.base_transforms(image=image[..., None])
+        item["mask"] = torch.zeros_like(image)  # fill in label with 0 for compatibility
+        item["label"] = -1
+        return item

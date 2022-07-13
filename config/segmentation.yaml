@@ -1,0 +1,35 @@
+name: yeast-protein-loc-segmentation
+
+hydra:
+  run:
+    dir: ./results/segmentation/${model.arch}-${model.encoder_name}/${now:%Y-%m-%d_%H-%M-%S}
+
+dev: False  # fast dev run: runs 1 train, val, test batch and program ends
+device: 0
+seed: 65
+
+data:
+  path: data/images/segmentation
+  metainfo: data/segmentation_dataset_metainfo.csv
+  distance_transform: True
+  log: True  # log transform
+  std: True  # standardize each image
+  crop: 256
+
+training:
+  valid_split: 0.1
+  batch_size: 32
+  num_workers: 8
+  epochs: 200
+  lr: 3e-4
+  min_lr: 1e-7
+  monitor: valid_F1Score
+
+model:
+  arch: unet
+  encoder_name: resnet34
+  in_channels: 1
+  classes: 1
+  encoder_weights: null
+  activation: sigmoid
+  lambda_aux: 0
