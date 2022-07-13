@@ -7,6 +7,7 @@ from albumentations.pytorch import transforms as T
 from torch.utils.data import Dataset, Sampler, SubsetRandomSampler
 
 from modules.tools.types import *
+from modules.tools.util import SubsetSampler
 
 
 def prepare_metainfo_labels(metainfo: pd.DataFrame) -> pd.DataFrame:
@@ -45,17 +46,6 @@ def prepare_metainfo_labels(metainfo: pd.DataFrame) -> pd.DataFrame:
     return metainfo
 
 
-class SubsetSampler(SubsetRandomSampler):
-    """Samples elements randomly from a given list of indices, without replacement.
-
-    Arguments:
-        indices (sequence): a sequence of indices
-    """
-
-    def __iter__(self):
-        return (self.indices[i] for i in range(len(self.indices)))
-
-
 class FramesDataset(Dataset):
     def __init__(
         self,
@@ -67,7 +57,9 @@ class FramesDataset(Dataset):
         validation_field: Union[int, None] = 4,
         select: Union[None, str, List[str]] = "wt",
         seed: int = 56,
-        transforms: List[Transform] = [],
+        transforms: Optional[Transforms] = None,
+        normalize: str = "std",
+        ignore_cache: bool = True,
     ):
         super().__init__()
         # Set random seed for potential split
@@ -95,13 +87,13 @@ class FramesDataset(Dataset):
         )
 
         # Read file list
-        if self.metainfo_cached.exists():
+        if self.metainfo_cached.exists() and not ignore_cache:
             print(f"Read cached metainfo from {self.metainfo_cached}")
             self.metainfo = pd.read_csv(self.metainfo_cached, index_col=0)
             self.files = self.metainfo["file"]
             self.n_classes = np.max(self.metainfo["class"] + 1)
         else:
-            if self.path_index.exists():
+            if self.path_index.exists() and not ignore_cache:
                 self.files = np.load(self.path_index)
             else:
                 self.files = sorted(
@@ -168,20 +160,25 @@ class FramesDataset(Dataset):
                 T.ToTensorV2(),
             ]
         )
-        self.aug_transforms = A.Compose(transforms)
+        self.aug_transforms = A.Compose(transforms if transforms is not None else [])
         self.transforms = A.Compose([self.aug_transforms, self.base_transforms])
+        self.normalize = normalize
 
     def __getitem__(self, i) -> Tuple[Tensor, int]:
         f, cls = self.metainfo.iloc[i][["file", "class"]]
-        img = np.load(f).astype(np.float32)[..., None]
+        img = np.load(f).astype(np.float32)
+        # img /= img.max()
+
         cls = int(cls)
 
         # normalize each image
         # (intensities could vary largely)
         #         img = np.log(img + 1)
-        img -= img.mean()
-        img /= img.std()
         img = self.transforms(image=img)["image"]
+
+        if self.normalize == "std":
+            img -= img.mean()
+            img /= img.std()
 
         return img, cls
 
