@@ -1,0 +1,27 @@
+name: yeast-protein-loc-classification
+
+hydra:
+  run:
+    dir: ./results/classification/${now:%Y-%m-%d_%H-%M-%S}
+
+dev: False  # fast dev run: runs 1 train, val, test batch and program ends
+device: 0
+seed: 65
+
+training:
+  batch_size: 256
+  num_workers: 8
+  epochs: 200
+  lr: 3e-4
+  min_lr: 1e-7
+
+model:
+  base_channels: 16
+  scale_factor: 1
+  metric_coefficient: 0
+
+data:
+  path_data: data
+  dir_frames: frames
+  validation_field: 4
+  normalize: std
