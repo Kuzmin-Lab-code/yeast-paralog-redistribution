@@ -153,21 +153,28 @@ class SegmentationModel(pl.LightningModule):
         self.eval()
         loader.dataset.eval()
         self.network = self.network.to(device)
+        self.valid_metrics.reset()
 
         ys = []
         predictions = []
-        accuracy = []
 
         with torch.no_grad():
             iterator = tqdm(loader)
             for batch in iterator:
-                batch = {k: v.to(device) for k, v in batch}
-                out, results = self.compute(batch)
-                accuracy.append(results["acc"])
-                iterator.set_postfix({"acc": np.mean(accuracy) * 100})
+                batch = {k: v.to(device) for k, v in batch.items()}
+                # todo figure out why original shape is not set automatically
+                loader.dataset.original_shape = batch["image"][0].shape
 
-                predictions.append(loader.dataset.crop_to_original(out.cpu()).numpy())
-                ys.append(loader.dataset.crop_to_original(batch["mask"].cpu()).numpy())
+                out, results = self.compute(batch)
+                out = loader.dataset.crop_to_original(out)
+                mask = loader.dataset.crop_to_original(batch["mask"])
+
+                metrics = self.valid_metrics(out, (mask > 0.5).int())
+                metrics = {k: f"{v.cpu().numpy(): .4f}" for k, v in metrics.items()}
+                iterator.set_postfix(metrics)
+
+                predictions.append(out.cpu().numpy())
+                ys.append(mask.cpu().numpy())
 
         predictions = np.concatenate(predictions)
         ys = np.concatenate(ys)

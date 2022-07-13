@@ -42,6 +42,7 @@ class BaseDataset(Dataset):
         self.base_transforms = get_base_transforms()
         self.transforms = self.base_transforms
         self.background = self._get_background()
+        self.n_classes = 1
 
         self.train()
 
