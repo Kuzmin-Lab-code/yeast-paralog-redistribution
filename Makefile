@@ -1,7 +1,7 @@
 TEST_PATH=./tests
 MODULES_PATH=./modules
 RESULTS_PATH=./results
-RUN_PATH=./run.py ./train_segmentation.py ./train_classification.py ./make_segmentation.py
+RUN_PATH=./run.py ./train_segmentation.py ./train_classification.py ./make_segmentation.py ./make_frames.py
 
 .PHONY: format
 format:

@@ -9,13 +9,13 @@ from torch.utils.data import Dataset
 
 from modules.tools.image import (
     calculate_readout_noise,
+    crop_as,
     log_transform_scale,
     read_np_pil,
     standardize,
 )
 from modules.tools.transforms import get_base_transforms
 from modules.tools.types import *
-from modules.tools.image import crop_as
 
 
 class BaseDataset(Dataset):

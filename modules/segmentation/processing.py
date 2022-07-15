@@ -211,8 +211,8 @@ def extract_frames_from_image(
         lambda x: np.pad(x, size // 2), [image, segmentation]
     )
     if mask_background:
-        pad_image[pad_segmentation < 0.5] = 0
-    centroids = [p["centroid"] for p in regionprops(label(pad_segmentation))]
+        pad_image[pad_segmentation == 0] = 0
+    centroids = [p["centroid"] for p in regionprops(label(pad_segmentation > 0))]
 
     n_obj = len(centroids)
     out = np.zeros((n_obj, size, size))
@@ -225,30 +225,51 @@ def extract_frames_from_image(
 
 
 def extract_frames_by_path(
-    path_image: PathT = "../data/images/experiment/input/",
-    path_segmentation: PathT = "../data/images/experiment/label/",
-    path_frames: PathT = "../data/frames/",
-    rewrite_existing: bool = False,
+    path_image: PathT = "./data/images/experiment/input/",
+    path_segmentation: PathT = "./data/images/experiment/label/",
+    path_frames: PathT = "./data/frames/",
+    overwrite_existing: bool = False,
+    segmentation_fmt: str = "png",
+    image_fmt: str = "flex",
     **kwargs,
-):
+) -> List[Dict[str, Any]]:
     """
     Extract frames from images using segmentation and preserving folder structure
     :param path_image: path to image root folder, search for .flex in subfolders
     :param path_segmentation: path to segmentation root folder, search for .png in subfolders
     :param path_frames: path to save extracted frames
-    :param rewrite_existing: if False, skip existing files
+    :param overwrite_existing: if False, skip existing files
+    :param segmentation_fmt: format of segmentation files
+    :param image_fmt: format of image files
     :param kwargs: for extract_frames_from_image()
     :return:
     """
 
-    files_segmentation = sorted(glob.glob(f"{path_segmentation}/**/*."))
-    for fs in tqdm(files_segmentation):
-        fi = fs.replace(path_segmentation, path_image).replace("flex", "png")
-        path_frames_from_image = Path(path_frames) / fs.split("/")[-1].split(".")[0]
+    files_segmentation = sorted(
+        glob.glob(f"{path_segmentation}/**/*.{segmentation_fmt}")
+    )
+    counts_list = []
+    total_count = 0
+
+    iterator = tqdm(files_segmentation)
+    for fs in iterator:
+        fi = fs.replace(path_segmentation, path_image).replace(
+            segmentation_fmt, image_fmt
+        )
+        fs = Path(fs)
+        path_frames_from_image = Path(path_frames) / fs.parent.stem / fs.stem
+
+        counts = {
+            "replicate": fs.parent.stem,
+            "image": fs.stem,
+            "n_frames": 0,
+            "total": total_count,
+        }
+        iterator.set_postfix(counts)
 
         try:
             # Make path to frames, they will be stored in a folder with the name of parent file
-            path_frames_from_image.mkdir(exist_ok=rewrite_existing, parents=True)
+            path_frames_from_image.mkdir(exist_ok=overwrite_existing, parents=True)
 
             # Read image and segmentation
             image = read_np_pil(fi)
@@ -256,10 +277,16 @@ def extract_frames_by_path(
 
             # Extract frames from image
             frames = extract_frames_from_image(image, segmentation, **kwargs)
+            counts["n_frames"] = frames.shape[0]
+            counts_list.append(counts)
+
+            total_count += counts["n_frames"]
+            counts["total"] = total_count
+            iterator.set_postfix(counts)
 
             # Save each frame in .npy file
             for i, frame in enumerate(frames):
-                np.save(path_frames_from_image / f"{i:05d}", frame)
+                np.save(str(path_frames_from_image / f"{i:05d}.npy"), frame)
 
         except FileExistsError:
             # Skip existing directories
@@ -272,3 +299,5 @@ def extract_frames_by_path(
             )
             shutil.rmtree(path_frames_from_image)
             break
+
+    return counts_list

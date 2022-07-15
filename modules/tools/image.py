@@ -30,9 +30,11 @@ def crop_as(x: np.ndarray, shape: Tuple[int, ...]) -> np.ndarray:
     top_left = diff // 2
     bottom_right = diff - top_left
     sl = tuple(slice(tl, s - br) for tl, s, br in zip(top_left, img_dim, bottom_right))
-    sl = (slice(None), ) * len(bc_dim) + sl
+    sl = (slice(None),) * len(bc_dim) + sl
     crop = x[sl]
-    assert crop.shape[-n_dim:] == shape, f"Failed to crop to {shape}, output shape {crop.shape}"
+    assert (
+        crop.shape[-n_dim:] == shape
+    ), f"Failed to crop to {shape}, output shape {crop.shape}"
     return crop
 
 
