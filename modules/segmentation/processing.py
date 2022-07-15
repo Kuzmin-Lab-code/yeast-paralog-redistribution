@@ -193,7 +193,7 @@ def watershed_distance_map(
     # Use minus, because watershed labels lowest values first
     ws = watershed(-distance_map, markers=label(seed), mask=mask, watershed_line=True)
     ws = remove_small_objects(ws, small_size_threshold)
-    return ws
+    return ws.astype(np.uint16)
 
 
 def extract_frames_from_image(

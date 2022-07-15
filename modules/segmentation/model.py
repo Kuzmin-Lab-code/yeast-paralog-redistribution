@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import *
 
 import numpy as np
@@ -5,10 +6,14 @@ import pytorch_lightning as pl
 import segmentation_models_pytorch as smp
 import torch
 import wandb
+from imageio import imwrite
 from pytorch_lightning.loggers import WandbLogger
 from torch import nn
 from torchmetrics import Accuracy, Dice, F1Score, MetricCollection, Precision, Recall
 from tqdm.auto import tqdm
+
+from modules.segmentation.processing import watershed_distance_map
+from modules.tools.image import crop_as
 
 
 class SegmentationModel(pl.LightningModule):
@@ -148,7 +153,15 @@ class SegmentationModel(pl.LightningModule):
         ]
         return optimizers, schedulers
 
-    def inference(self, loader, device="cuda"):
+    def inference(
+        self,
+        loader,
+        device: str = "cuda",
+        measure_metrics: bool = True,
+        target_path: Optional[Path] = None,
+        postprocess: bool = False,
+        original_shape: Optional[Tuple[int, int]] = None,
+    ):
         self.freeze()
         self.eval()
         loader.dataset.eval()
@@ -161,23 +174,47 @@ class SegmentationModel(pl.LightningModule):
         with torch.no_grad():
             iterator = tqdm(loader)
             for batch in iterator:
+                i = batch["id"]
+
                 batch = {k: v.to(device) for k, v in batch.items()}
-                # todo figure out why original shape is not set automatically
-                loader.dataset.original_shape = batch["image"][0].shape
 
                 out, results = self.compute(batch)
-                out = loader.dataset.crop_to_original(out)
-                mask = loader.dataset.crop_to_original(batch["mask"])
+                if original_shape is not None:
+                    out = crop_as(out, original_shape)
+                    mask = crop_as(batch["mask"], original_shape)
 
-                metrics = self.valid_metrics(out, (mask > 0.5).int())
-                metrics = {k: f"{v.cpu().numpy(): .4f}" for k, v in metrics.items()}
-                iterator.set_postfix(metrics)
+                if measure_metrics:
+                    metrics = self.valid_metrics(out, (mask > 0.5).int())
+                    metrics = {k: f"{v.cpu().numpy(): .4f}" for k, v in metrics.items()}
+                    iterator.set_postfix(metrics)
 
-                predictions.append(out.cpu().numpy())
-                ys.append(mask.cpu().numpy())
+                out = out.cpu().numpy()
+                mask = mask.cpu().numpy()
 
-        predictions = np.concatenate(predictions)
-        ys = np.concatenate(ys)
+                if target_path is not None:
+                    for pred in out:
+                        fn = Path(loader.dataset.files[i])
+                        pred_path = target_path / fn.parent.stem
+                        if not pred_path.exists():
+                            pred_path.mkdir(exist_ok=True)
+                        np.save(str(pred_path / f"{fn.stem}_prob.npy"), pred)
+                        if postprocess:
+                            # todo parametrize
+                            pred = watershed_distance_map(
+                                pred.squeeze(),
+                                seed_threshold=0.8,
+                                mask_threshold=0.5,
+                                region_assurance=True,
+                                small_size_threshold=32,
+                            )
+                            imwrite(str(pred_path / f"{fn.stem}.png"), pred)
+                else:
+                    predictions.append(out)
+                    ys.append(mask)
+
+        if predictions:
+            predictions = np.concatenate(predictions)
+            ys = np.concatenate(ys)
 
         self.unfreeze()
         return predictions, ys

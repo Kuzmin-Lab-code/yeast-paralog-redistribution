@@ -1,6 +1,5 @@
 import argparse
 import glob
-import json
 import os
 from pathlib import Path
 from pprint import pprint
@@ -10,7 +9,6 @@ import torch
 from omegaconf import DictConfig, OmegaConf
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader
-from tqdm.auto import tqdm
 
 from modules.segmentation import dataset, model
 from modules.tools import util
@@ -28,7 +26,10 @@ def main():
         default="results/segmentation/unet-resnet34/2022-07-12_22-48-28",
     )
     parser.add_argument(
-        "--data_path", help="Test data path", default="data/images/experiment", type=str
+        "--data_path",
+        help="Test data path",
+        default="data/images/experiment/input",
+        type=str,
     )
     parser.add_argument(
         "--validate", "-v", action="store_true", help="Run validation only"
@@ -118,7 +119,8 @@ def main():
         lr=cfg.training.lr,
         min_lr=cfg.training.min_lr,
         epochs=cfg.training.epochs,
-        classes_aux=ads.n_classes,
+        # todo fix for custom classes
+        # classes_aux=ads.n_classes,
     )
 
     # Load checkpoints
@@ -134,9 +136,17 @@ def main():
 
     checkpoints = [torch.load(c)["state_dict"] for c in checkpoints]
     checkpoints = util.average_weights(checkpoints)
-    mdl.load_state_dict(checkpoints)
+    mdl.load_state_dict(checkpoints, strict=False)
 
-    preds, ys = mdl.inference(loader)
+    original_shape = ads.get_original_shape()
+    print("Original shape:", original_shape)
+    preds, ys = mdl.inference(
+        loader,
+        measure_metrics=args.validate,
+        target_path=target_path if not args.validate else None,
+        postprocess=args.postprocess,
+        original_shape=original_shape,
+    )
     if args.validate:
         metrics = {
             k: f"{v.cpu().numpy(): .4f}" for k, v in mdl.valid_metrics.compute().items()
