@@ -28,6 +28,8 @@ class BaseDataset(Dataset):
         divisibility: int = 32,
         subtract_background_noise: bool = True,
         transforms: Optional[List[Transform]] = None,
+        random_scale: Optional[Union[float, Tuple[float, float]]] = None,
+        random_shift: Optional[float] = None,
     ):
         super().__init__()
         self.path = Path(path)
@@ -38,6 +40,11 @@ class BaseDataset(Dataset):
         self.subtract_background_noise = subtract_background_noise
         self.files = self._get_filenames()
         self.original_shape = None
+        self.random_shift = random_shift
+        self.random_scale = random_scale
+
+        if self.random_scale is not None and not isinstance(self.random_scale, tuple):
+            self.random_scale = (1 / self.random_scale, self.random_scale)
 
         self.aug_transforms = transforms
         self.base_transforms = get_base_transforms()
@@ -45,6 +52,7 @@ class BaseDataset(Dataset):
         self.background = self._get_background()
         self.n_classes = 1
 
+        self.is_training = True
         self.train()
 
     def _get_filenames(self) -> List[str]:
@@ -83,7 +91,25 @@ class BaseDataset(Dataset):
             image = log_transform_scale(image)
         if self.std:
             image = standardize(image)
+
+        # todo make it an albumentation transform
+        if self.is_training and self.random_shift is not None:
+            image = self._random_shift(image)
+        if self.is_training and self.random_scale is not None:
+            image = self._random_scale(image)
         return image
+
+    def _random_shift(self, image):
+        if self.random_shift is None:
+            return image
+        shift = np.random.uniform(low=-self.random_shift, high=self.random_shift)
+        return image + shift
+
+    def _random_scale(self, image):
+        if self.random_scale is None:
+            return image
+        scale = np.random.uniform(self.random_scale[0], self.random_scale[1])
+        return image * scale
 
     def crop_to_original(self, x):
         if self.original_shape is None:
@@ -104,12 +130,14 @@ class BaseDataset(Dataset):
         """
         Switch off training augmentations
         """
+        self.is_training = False
         self.transforms = A.Compose([self.base_transforms])
 
     def train(self):
         """
         Switch on training augmentations
         """
+        self.is_training = True
         self.transforms = A.Compose([self.aug_transforms, self.base_transforms])
 
 
@@ -167,11 +195,12 @@ class AnnotatedDataset(BaseDataset):
         item = self.transforms(image=image[..., None], mask=mask)
         item["mask"] = item["mask"].float().unsqueeze(0)
         item["label"] = torch.tensor(row["gene_id"]).long()
+        item["id"] = i
         return item
 
 
 class ExperimentDataset(BaseDataset):
-    def __init__(self, path: str = "../data/images/experiment", *args, **kwargs):
+    def __init__(self, path: str = "../data/images/experiment/input", *args, **kwargs):
         super().__init__(path=path, *args, **kwargs)
 
     def _get_filenames(self) -> List[str]:
@@ -182,6 +211,9 @@ class ExperimentDataset(BaseDataset):
         self.original_shape = image.shape
         image = self._normalize_image(image)
         item = self.base_transforms(image=image[..., None])
-        item["mask"] = torch.zeros_like(image)  # fill in label with 0 for compatibility
-        item["label"] = -1
+        item["mask"] = torch.zeros_like(
+            item["image"]
+        )  # fill in label with 0 for compatibility
+        item["label"] = 0
+        item["id"] = i
         return item

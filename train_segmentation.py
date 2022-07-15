@@ -36,6 +36,8 @@ def main(cfg: DictConfig) -> None:
         metainfo=cwd / cfg.data.metainfo,
         log=cfg.data.log,
         std=cfg.data.std,
+        random_scale=cfg.data.random_scale,
+        random_shift=cfg.data.random_shift,
         distance_transform=cfg.data.distance_transform,
         transforms=get_train_transforms(cfg.data.crop),
     )
