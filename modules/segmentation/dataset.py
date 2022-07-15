@@ -15,6 +15,7 @@ from modules.tools.image import (
 )
 from modules.tools.transforms import get_base_transforms
 from modules.tools.types import *
+from modules.tools.image import crop_as
 
 
 class BaseDataset(Dataset):
@@ -87,12 +88,17 @@ class BaseDataset(Dataset):
     def crop_to_original(self, x):
         if self.original_shape is None:
             raise ValueError("Original shape is not known, get some items first")
-        slices = tuple(slice(s) for s in self.original_shape)
-        # Pad dimensions
-        # NB! Assuming torch channel first
-        for _ in range(len(slices), len(x.shape)):
-            slices = (slice(None),) + slices
-        return x[slices]
+        # slices = tuple(slice(s) for s in self.original_shape)
+        # # Pad dimensions
+        # # NB! Assuming torch channel first
+        # for _ in range(len(slices), len(x.shape)):
+        #     slices = (slice(None),) + slices
+        # return x[slices]
+        return crop_as(x, self.original_shape)
+
+    def get_original_shape(self):
+        _ = self.__getitem__(0)
+        return self.original_shape
 
     def eval(self):
         """
@@ -155,6 +161,7 @@ class AnnotatedDataset(BaseDataset):
         row = self.metainfo.iloc[i, :]
         mask = np.load(row["label"]).astype(np.float32)
         image = read_np_pil(row["image"]).astype(np.float32)
+        self.original_shape = image.shape
         image = self._normalize_image(image)
 
         item = self.transforms(image=image[..., None], mask=mask)
@@ -172,6 +179,7 @@ class ExperimentDataset(BaseDataset):
 
     def __getitem__(self, i) -> Dict[str, Tensor]:
         image = read_np_pil(self.files[i]).astype(np.float32)
+        self.original_shape = image.shape
         image = self._normalize_image(image)
         item = self.base_transforms(image=image[..., None])
         item["mask"] = torch.zeros_like(image)  # fill in label with 0 for compatibility

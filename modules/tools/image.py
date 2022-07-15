@@ -15,6 +15,27 @@ def read_np_pil(path: PathT) -> ndarray:
     return np.array(Image.open(path))
 
 
+def crop_as(x: np.ndarray, shape: Tuple[int, ...]) -> np.ndarray:
+    """
+    Crops x to shape evenly from each side
+    (assumes even padding to remove)
+    :param x:
+    :param shape:
+    :return: cropped x
+    """
+    n_dim = len(shape)
+    bc_dim, img_dim = x.shape[:-n_dim], x.shape[-n_dim:]
+    diff = np.array(img_dim) - np.array(shape)
+    assert np.all(diff >= 0)
+    top_left = diff // 2
+    bottom_right = diff - top_left
+    sl = tuple(slice(tl, s - br) for tl, s, br in zip(top_left, img_dim, bottom_right))
+    sl = (slice(None), ) * len(bc_dim) + sl
+    crop = x[sl]
+    assert crop.shape[-n_dim:] == shape, f"Failed to crop to {shape}, output shape {crop.shape}"
+    return crop
+
+
 def min_max_scale(
     img: Array,
     mi: Optional[float] = None,
