@@ -92,9 +92,13 @@ def main(cfg: DictConfig) -> None:
         metric_coefficient=cfg.model.metric_coefficient,
     )
 
-    wandb_logger = WandbLogger(project=cfg.name)
-    wandb_logger.experiment.config.update(util.flatten_cfg(cfg))
-    tensorboard_logger = TensorBoardLogger(save_dir="tensorboard", name=cfg.name)
+    logger = None
+    if not cfg.dev:
+        wandb_logger = WandbLogger(project=cfg.name)
+        wandb_logger.experiment.config.update(util.flatten_cfg(cfg))
+        tensorboard_logger = TensorBoardLogger(save_dir="tensorboard", name=cfg.name)
+        logger = [wandb_logger, tensorboard_logger]
+
     checkpoint_callback = ModelCheckpoint(
         monitor="val_acc", mode="max", save_last=True, save_top_k=3
     )
@@ -102,7 +106,7 @@ def main(cfg: DictConfig) -> None:
     trainer = Trainer(
         gpus=1,
         max_epochs=cfg.training.epochs,
-        logger=[wandb_logger, tensorboard_logger],
+        logger=logger,
         callbacks=[checkpoint_callback],
         fast_dev_run=cfg.dev,
     )
@@ -114,7 +118,9 @@ def main(cfg: DictConfig) -> None:
     accuracy = {f"acc@top{k}": metrics.accuracy(y, predictions, top=k) for k in top_k}
     for k, acc in accuracy.items():
         print(f"{k}: {acc * 100: .2f}")
-    wandb_logger.log_metrics(accuracy)
+
+    if not cfg.dev:
+        wandb_logger.log_metrics(accuracy)
 
 
 if __name__ == "__main__":
