@@ -73,13 +73,16 @@ def main(cfg: DictConfig) -> None:
             encoder_name=cfg_segmentation.model.encoder_name,
             in_channels=cfg_segmentation.model.in_channels,  # assuming the same for classification
             n_classes=wt_dataset.n_classes,
+            dropout=cfg.model.dropout,
         )
         net.load_state_dict_from_segmentation(weights)
     else:
         # todo parametrize with torchvision/timm models
         print("Create a resnet18 model")
         net = network.resnet18(
-            n_classes=wt_dataset.n_classes, base_channels=cfg.model.base_channels
+            n_classes=wt_dataset.n_classes,
+            base_channels=cfg.model.base_channels,
+            dropout=cfg.model.dropout,
         )
 
     mdl = model.LitModel(

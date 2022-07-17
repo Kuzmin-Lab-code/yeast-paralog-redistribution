@@ -19,6 +19,7 @@ model:
   base_channels: 16
   scale_factor: 1
   metric_coefficient: 0
+  dropout: 0
 
 data:
   path_data: data

@@ -126,6 +126,7 @@ class ResidualNetwork(nn.Module):
         n_classes: int = 2,
         in_channels: int = 1,
         base_channels: int = 16,
+        dropout: float = 0.0,
     ):
         """
         ResNet v2
@@ -137,6 +138,7 @@ class ResidualNetwork(nn.Module):
         """
         super().__init__()
         self.n_classes = n_classes
+        self.dropout = dropout
         self.features = nn.Sequential(
             nn.Conv2d(
                 in_channels=in_channels,
@@ -172,6 +174,7 @@ class ResidualNetwork(nn.Module):
             nn.BatchNorm2d(base_channels * 8),
             nn.AdaptiveAvgPool2d(1),
             nn.Flatten(),
+            nn.Dropout(dropout),
         )
         self.fc = nn.Linear(base_channels * 8, n_classes, bias=True)
 
