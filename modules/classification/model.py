@@ -1,3 +1,5 @@
+import itertools
+
 import numpy as np
 import pytorch_lightning as pl
 import torch
@@ -6,13 +8,13 @@ from torchmetrics import Accuracy
 from tqdm.auto import tqdm
 
 from modules.classification.loss import ArcFaceLoss, ArcMarginProductPlain
-from modules.classification.network import resnet18
 
 
 class LitModel(pl.LightningModule):
     def __init__(
         self,
-        network: nn.Module = resnet18(n_classes=182),
+        backbone: nn.Module,
+        head: nn.Module,
         criterion: nn.Module = nn.CrossEntropyLoss(),
         metric_criterion: nn.Module = ArcFaceLoss(),
         metric_coefficient: float = 0.25,
@@ -25,14 +27,15 @@ class LitModel(pl.LightningModule):
         super().__init__()
         np.random.seed(seed)
 
-        self.network = network
+        self.backbone = backbone
+        self.head = head
         self.criterion = criterion
 
         self.metric_coefficient = metric_coefficient
         if self.metric_coefficient > 0:
             self.metric_criterion = metric_criterion
             self.metric = ArcMarginProductPlain(
-                self.network.fc.in_features, self.network.fc.out_features
+                self.head.in_features, self.head.out_features
             )
         # Metrics
         self.accuracy = Accuracy()
@@ -43,7 +46,7 @@ class LitModel(pl.LightningModule):
         self.min_lr = min_lr
 
     def forward(self, x):
-        return self.network(x)
+        return self.head(self.backbone(x))
 
     def training_step(self, batch, batch_idx):
         x, y = batch
@@ -53,8 +56,8 @@ class LitModel(pl.LightningModule):
                 x, scale_factor=self.scale_factor, mode="bicubic"
             )
 
-        features = self.network.features(x)
-        out = self.network.fc(features)
+        features = self.backbone(x)
+        out = self.head(features)
         clf_loss = self.criterion(out, y)
 
         result = {}
@@ -97,7 +100,12 @@ class LitModel(pl.LightningModule):
         return result
 
     def configure_optimizers(self):
-        optimizers = [torch.optim.Adam(self.network.parameters(), lr=self.lr)]
+        optimizers = [
+            torch.optim.Adam(
+                itertools.chain(self.backbone.parameters(), self.head.parameters()),
+                lr=self.lr,
+            )
+        ]
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
             optimizers[0], T_max=self.epochs, eta_min=self.min_lr
         )
@@ -131,8 +139,8 @@ class LitModel(pl.LightningModule):
 
     def inference(self, loader):
         self.freeze()
-        self.network = self.network.cuda()
-        self.eval()
+        self.backbone = self.backbone.cuda()
+        self.head = self.head.cuda()
         loader.dataset.eval()
 
         ys = []
@@ -149,8 +157,8 @@ class LitModel(pl.LightningModule):
                         x, scale_factor=self.scale_factor, mode="bicubic"
                     )
 
-                fts = self.network.features(x.cuda())
-                out = self.network.fc(fts)
+                fts = self.backbone(x.cuda())
+                out = self.head(fts)
 
                 acc.append(self.accuracy(out.argmax(1).cpu(), y).cpu().numpy())
                 iterator.set_postfix({"acc": np.mean(acc) * 100})

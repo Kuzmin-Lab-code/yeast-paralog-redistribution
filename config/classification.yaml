@@ -20,6 +20,7 @@ model:
   scale_factor: 1
   metric_coefficient: 0
   dropout: 0
+  only_head: 0  # number of epochs to train only head, freeze backbone
 
 data:
   path_data: data

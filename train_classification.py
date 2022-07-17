@@ -5,8 +5,9 @@ import hydra
 from hydra.utils import get_original_cwd
 from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning import Trainer
-from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.callbacks import BackboneFinetuning, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
+from torch import nn
 from torch.utils.data import DataLoader
 
 from modules.classification import dataset, model, network
@@ -69,24 +70,29 @@ def main(cfg: DictConfig) -> None:
         print("Load encoder from segmentation checkpoint")
         cfg_segmentation, weights = util.load_cfg_and_checkpoint(cwd / checkpoint_path)
         print(f"Create a {cfg_segmentation.model.encoder_name} model")
-        net = network.EncoderWithHead(
+        backbone = network.EncoderHeadless(
             encoder_name=cfg_segmentation.model.encoder_name,
             in_channels=cfg_segmentation.model.in_channels,  # assuming the same for classification
-            n_classes=wt_dataset.n_classes,
             dropout=cfg.model.dropout,
         )
-        net.load_state_dict_from_segmentation(weights)
+        backbone.load_state_dict_from_segmentation(weights)
     else:
         # todo parametrize with torchvision/timm models
         print("Create a resnet18 model")
-        net = network.resnet18(
-            n_classes=wt_dataset.n_classes,
+        backbone = network.ResidualNetworkHeadless(
+            num_units=2,  # resnet18
+            in_channels=1,
             base_channels=cfg.model.base_channels,
             dropout=cfg.model.dropout,
         )
 
+    head = nn.Linear(
+        in_features=backbone.out_channels, out_features=wt_dataset.n_classes
+    )
+
     mdl = model.LitModel(
-        network=net,
+        backbone=backbone,
+        head=head,
         scale_factor=cfg.model.scale_factor,
         seed=cfg.seed,
         epochs=cfg.training.epochs,
@@ -102,15 +108,26 @@ def main(cfg: DictConfig) -> None:
         tensorboard_logger = TensorBoardLogger(save_dir="tensorboard", name=cfg.name)
         logger = [wandb_logger, tensorboard_logger]
 
-    checkpoint_callback = ModelCheckpoint(
-        monitor="val_acc", mode="max", save_last=True, save_top_k=3
-    )
+    callbacks = [
+        ModelCheckpoint(monitor="val_acc", mode="max", save_last=True, save_top_k=3)
+    ]
+
+    if cfg.model.only_head > 0:
+        print(f"Finetune the head for {cfg.model.only_head} epochs")
+        callbacks.append(
+            BackboneFinetuning(
+                unfreeze_backbone_at_epoch=cfg.model.only_head,
+                backbone_initial_ratio_lr=1 / 16,
+                verbose=True,
+                train_bn=True,
+            )
+        )
 
     trainer = Trainer(
         gpus=1,
         max_epochs=cfg.training.epochs,
         logger=logger,
-        callbacks=[checkpoint_callback],
+        callbacks=callbacks,
         fast_dev_run=cfg.dev,
     )
     trainer.fit(mdl, train_loader, valid_loader)

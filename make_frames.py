@@ -1,4 +1,5 @@
 import argparse
+
 import pandas as pd
 
 from modules.segmentation.processing import extract_frames_by_path
