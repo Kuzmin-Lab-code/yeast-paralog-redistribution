@@ -1,11 +1,13 @@
+import glob
 import os
 import random
 from collections import OrderedDict
-from typing import Dict, List
+from pathlib import Path
+from typing import Dict, List, Tuple
 
 import numpy as np
 import torch
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import SubsetRandomSampler
 
 
@@ -85,3 +87,24 @@ def average_weights(state_dicts: List[dict]) -> OrderedDict:
         )
 
     return average_dict
+
+
+def load_cfg_and_checkpoint(run_path: str) -> Tuple[DictConfig, Dict]:
+    run_path = Path(run_path)
+    if not run_path.exists():
+        raise ValueError(f"{run_path} does not exist")
+    if not run_path.is_dir():
+        raise ValueError(
+            f"{run_path} is not a directory. Make sure you provide a path to a directory created by Hydra"
+        )
+
+    checkpoints = glob.glob(str(run_path / "**/**/checkpoints/*.ckpt"))
+    if not checkpoints:
+        raise ValueError(f"No checkpoints found in {run_path}")
+
+    weights = [torch.load(c)["state_dict"] for c in checkpoints]
+    weights = average_weights(weights)
+
+    cfg = OmegaConf.load(run_path / ".hydra" / "config.yaml")
+
+    return cfg, weights

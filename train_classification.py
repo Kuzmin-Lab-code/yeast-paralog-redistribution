@@ -64,10 +64,26 @@ def main(cfg: DictConfig) -> None:
         drop_last=False,
     )
 
-    mdl = model.LitModel(
-        network=network.resnet18(
+    checkpoint_path = getattr(cfg, "checkpoint", None)
+    if checkpoint_path is not None:
+        print("Load encoder from segmentation checkpoint")
+        cfg_segmentation, weights = util.load_cfg_and_checkpoint(cwd / checkpoint_path)
+        print(f"Create a {cfg_segmentation.model.encoder_name} model")
+        net = network.EncoderWithHead(
+            encoder_name=cfg_segmentation.model.encoder_name,
+            in_channels=cfg_segmentation.model.in_channels,  # assuming the same for classification
+            n_classes=wt_dataset.n_classes,
+        )
+        net.load_state_dict_from_segmentation(weights)
+    else:
+        # todo parametrize with torchvision/timm models
+        print("Create a resnet18 model")
+        net = network.resnet18(
             n_classes=wt_dataset.n_classes, base_channels=cfg.model.base_channels
-        ),
+        )
+
+    mdl = model.LitModel(
+        network=net,
         scale_factor=cfg.model.scale_factor,
         seed=cfg.seed,
         epochs=cfg.training.epochs,

@@ -1,6 +1,7 @@
 import warnings
 
 import torch
+from segmentation_models_pytorch.encoders import get_encoder
 from torch import nn as nn
 from torch.nn import functional as F
 
@@ -184,6 +185,47 @@ class ResidualNetwork(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         x = self.features(x)
         return self.fc(x)
+
+
+class Encoder(nn.Module):
+    def __init__(self, encoder: nn.Module):
+        super(Encoder, self).__init__()
+        self.encoder = encoder
+        self.out_channels = encoder.out_channels[-1]
+
+    def forward(self, x: Tensor) -> Tensor:
+        # return last level features only
+        return self.encoder(x)[-1]
+
+
+class EncoderWithHead(nn.Module):
+    def __init__(
+        self, encoder_name: str, in_channels: int, n_classes: int, dropout: float = 0.0
+    ):
+        super().__init__()
+        self.features = nn.Sequential(
+            Encoder(get_encoder(encoder_name, in_channels=in_channels)),
+            nn.AdaptiveAvgPool2d(1),
+            nn.Flatten(),
+            nn.Dropout(dropout),
+        )
+        self.fc = nn.Linear(self.features[0].out_channels, n_classes)
+
+    def forward(self, x: Tensor) -> Tensor:
+        x = self.features(x)
+        return self.fc(x)
+
+    def load_state_dict_from_segmentation(
+        self,
+        state_dict: Union[Dict[str, Tensor], Dict[str, Tensor]],
+        strict: bool = True,
+    ):
+        encoder_weights = {
+            k.replace("network.", ""): v
+            for k, v in state_dict.items()
+            if "encoder" in k
+        }
+        self.features[0].load_state_dict(encoder_weights, strict=strict)
 
 
 def resnet10(n_classes: int, base_channels: int = 16, **kwargs: Any) -> nn.Module:
