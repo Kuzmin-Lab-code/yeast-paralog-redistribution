@@ -205,7 +205,6 @@ class SegmentationModel(pl.LightningModule):
                                 seed_threshold=0.8,
                                 mask_threshold=0.5,
                                 region_assurance=True,
-                                small_size_threshold=32,
                             )
                             imwrite(str(pred_path / f"{fn.stem}.png"), pred)
                 else:

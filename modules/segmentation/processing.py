@@ -155,7 +155,7 @@ def make_distance_transform_dir(
             s = make_distance_transform(
                 s, alpha=alpha, clip=clip, scale_by_stencil=scale_by_stencil
             )
-            np.save(output_fn, s)
+            np.save(str(output_fn), s)
         except KeyboardInterrupt:
             break
         except:
@@ -163,12 +163,28 @@ def make_distance_transform_dir(
             raise
 
 
+def remove_large_objects(ar: ndarray, max_size: int = 8192):
+    """
+    Removes large objects from a binary array
+    :param ar: binary array
+    :param max_size: max object size to keep
+    :return: binary array with large objects removed
+    """
+    # TODO might not be the most efficient solution, consider rewriting skimage function
+    labels, num_labels = label(ar, return_num=True)
+    for c in range(1, num_labels + 1):
+        if np.sum(labels == c) > max_size:
+            ar[labels == c] = 0
+    return ar
+
+
 def watershed_distance_map(
     distance_map: ndarray,
     seed_threshold: float = 0.8,
     mask_threshold: float = 0.5,
     region_assurance: bool = True,
-    small_size_threshold: int = 32,
+    small_size_threshold: int = 256,
+    large_size_threshold: int = 8192,
 ) -> ndarray:
     """
     Use watershed to binarize distance map
@@ -177,6 +193,7 @@ def watershed_distance_map(
     :param mask_threshold: threshold for mask
     :param region_assurance: bool, preserves all the regions in mask
     :param small_size_threshold: size threshold to filter shall objects and holes
+    :param large_size_threshold: size threshold to filter large objects
     :return: object segmentation
     """
     seed = remove_small_objects(distance_map > seed_threshold, small_size_threshold)
@@ -193,7 +210,9 @@ def watershed_distance_map(
     # Use minus, because watershed labels lowest values first
     ws = watershed(-distance_map, markers=label(seed), mask=mask, watershed_line=True)
     ws = remove_small_objects(ws, small_size_threshold)
-    return ws.astype(np.uint16)
+    ws = remove_large_objects(ws, large_size_threshold)
+    # We can threshold segmentation, because objects were separated with line
+    return (ws > 0).astype(np.uint8)
 
 
 def extract_frames_from_image(
