@@ -3,7 +3,7 @@ import os
 import random
 from collections import OrderedDict
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Union
 
 import numpy as np
 import torch
@@ -108,3 +108,26 @@ def load_cfg_and_checkpoint(run_path: str) -> Tuple[DictConfig, Dict]:
     cfg = OmegaConf.load(run_path / ".hydra" / "config.yaml")
 
     return cfg, weights
+
+
+def load_checkpoint_from_run_path(
+    model: torch.nn.Module, path: Union[str, Path], select_checkpoint: str = "average", strict: bool = True,
+) -> torch.nn.Module:
+    path = Path(path)
+    # Load checkpoints
+    if select_checkpoint == "average":
+        checkpoints = glob.glob(str(path / "**/**/checkpoints/*.ckpt"))
+    elif select_checkpoint == "last":
+        checkpoints = glob.glob(str(path / "**/**/checkpoints/last.ckpt"))
+    elif select_checkpoint == "best":
+        # todo not guaranteed to be best! double-check top-k saving pattern
+        checkpoints = [glob.glob(str(path / "**/**/checkpoints/*.ckpt"))[-2]]
+    else:
+        raise ValueError(
+            f"Checkpoint {select_checkpoint} is not supported, choose from [average, last, best]"
+        )
+
+    checkpoints = [torch.load(c)["state_dict"] for c in checkpoints]
+    checkpoints = average_weights(checkpoints)
+    model.load_state_dict(checkpoints, strict=strict)
+    return model

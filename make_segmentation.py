@@ -124,19 +124,7 @@ def main():
     )
 
     # Load checkpoints
-    if args.checkpoint == "average":
-        checkpoints = glob.glob(str(path / "**/**/checkpoints/*.ckpt"))
-    elif args.checkpoint == "last":
-        checkpoints = glob.glob(str(path / "**/**/checkpoints/last.ckpt"))
-    elif args.checkpoint == "best":
-        # todo not guaranteed to be best! double-check top-k saving pattern
-        checkpoints = [glob.glob(str(path / "**/**/checkpoints/*.ckpt"))[-2]]
-    else:
-        raise ValueError(f"Checkpoint {args.checkpoint} is not supported")
-
-    checkpoints = [torch.load(c)["state_dict"] for c in checkpoints]
-    checkpoints = util.average_weights(checkpoints)
-    mdl.load_state_dict(checkpoints, strict=False)
+    mdl = util.load_checkpoint_from_run_path(mdl, path, args.checkpoint)
 
     original_shape = ads.get_original_shape()
     print("Original shape:", original_shape)
