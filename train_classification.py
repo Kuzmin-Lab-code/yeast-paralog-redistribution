@@ -65,42 +65,10 @@ def main(cfg: DictConfig) -> None:
         drop_last=False,
     )
 
-    checkpoint_path = getattr(cfg, "checkpoint", None)
-    if checkpoint_path is not None:
-        print("Load encoder from segmentation checkpoint")
-        cfg_segmentation, weights = util.load_cfg_and_checkpoint(cwd / checkpoint_path)
-        print(f"Create a {cfg_segmentation.model.encoder_name} model")
-        backbone = network.EncoderHeadless(
-            encoder_name=cfg_segmentation.model.encoder_name,
-            in_channels=cfg_segmentation.model.in_channels,  # assuming the same for classification
-            dropout=cfg.model.dropout,
-        )
-        backbone.load_state_dict_from_segmentation(weights)
-    else:
-        # todo parametrize with torchvision/timm models
-        print("Create a resnet18 model")
-        backbone = network.ResidualNetworkHeadless(
-            num_units=2,  # resnet18
-            in_channels=1,
-            base_channels=cfg.model.base_channels,
-            dropout=cfg.model.dropout,
-        )
+    # Model
+    mdl = model.get_model(cfg, n_classes=wt_dataset.n_classes)
 
-    head = nn.Linear(
-        in_features=backbone.out_channels, out_features=wt_dataset.n_classes
-    )
-
-    mdl = model.LitModel(
-        backbone=backbone,
-        head=head,
-        scale_factor=cfg.model.scale_factor,
-        seed=cfg.seed,
-        epochs=cfg.training.epochs,
-        lr=cfg.training.lr,
-        min_lr=cfg.training.min_lr,
-        metric_coefficient=cfg.model.metric_coefficient,
-    )
-
+    # Loggers
     logger = None
     if not cfg.dev:
         wandb_logger = WandbLogger(project=cfg.name)
@@ -108,6 +76,7 @@ def main(cfg: DictConfig) -> None:
         tensorboard_logger = TensorBoardLogger(save_dir="tensorboard", name=cfg.name)
         logger = [wandb_logger, tensorboard_logger]
 
+    # Callbacks
     callbacks = [
         ModelCheckpoint(monitor="val_acc", mode="max", save_last=True, save_top_k=3)
     ]
@@ -117,12 +86,13 @@ def main(cfg: DictConfig) -> None:
         callbacks.append(
             BackboneFinetuning(
                 unfreeze_backbone_at_epoch=cfg.model.only_head,
-                backbone_initial_ratio_lr=1 / 16,
-                verbose=True,
+                backbone_initial_ratio_lr=1,
+                # verbose=True,
                 train_bn=True,
             )
         )
 
+    # Training
     trainer = Trainer(
         gpus=1,
         max_epochs=cfg.training.epochs,
@@ -132,6 +102,7 @@ def main(cfg: DictConfig) -> None:
     )
     trainer.fit(mdl, train_loader, valid_loader)
 
+    # Inference
     predictions, features, y = mdl.inference(valid_loader)
 
     top_k = [1, 5, 10]

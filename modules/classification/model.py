@@ -1,13 +1,18 @@
 import itertools
+from pathlib import Path
 
 import numpy as np
 import pytorch_lightning as pl
 import torch
+from hydra.utils import get_original_cwd
+from omegaconf import DictConfig
 from torch import nn
 from torchmetrics import Accuracy
 from tqdm.auto import tqdm
 
+from modules.classification import network
 from modules.classification.loss import ArcFaceLoss, ArcMarginProductPlain
+from modules.tools import util
 
 
 class LitModel(pl.LightningModule):
@@ -173,3 +178,41 @@ class LitModel(pl.LightningModule):
 
         self.unfreeze()
         return predictions, features, ys
+
+
+def get_model(cfg: DictConfig, n_classes: int):
+    cwd = Path(get_original_cwd())
+    checkpoint_path = getattr(cfg, "checkpoint", None)
+
+    if checkpoint_path is not None:
+        print("Load encoder from segmentation checkpoint")
+        cfg_segmentation, weights = util.load_cfg_and_checkpoint(cwd / checkpoint_path)
+        print(f"Create a {cfg_segmentation.model.encoder_name} model")
+        backbone = network.EncoderHeadless(
+            encoder_name=cfg_segmentation.model.encoder_name,
+            in_channels=cfg_segmentation.model.in_channels,  # assuming the same for classification
+            dropout=cfg.model.dropout,
+        )
+        backbone.load_state_dict_from_segmentation(weights)
+    else:
+        # todo parametrize with torchvision/timm models
+        print("Create a resnet18 model")
+        backbone = network.ResidualNetworkHeadless(
+            num_units=2,  # resnet18
+            in_channels=1,
+            base_channels=cfg.model.base_channels,
+            dropout=cfg.model.dropout,
+        )
+
+    head = nn.Linear(in_features=backbone.out_channels, out_features=n_classes)
+
+    return LitModel(
+        backbone=backbone,
+        head=head,
+        scale_factor=cfg.model.scale_factor,
+        seed=cfg.seed,
+        epochs=cfg.training.epochs,
+        lr=cfg.training.lr,
+        min_lr=cfg.training.min_lr,
+        metric_coefficient=cfg.model.metric_coefficient,
+    )
