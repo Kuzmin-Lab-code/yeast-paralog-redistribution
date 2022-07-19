@@ -74,6 +74,9 @@ def main():
     # Iterate over gene pairs
     iterator = tqdm(np.unique(metainfo.pairs))
     for pair in iterator:
+        if pair == "control":
+            # TODO add workaround to generate separate files for control
+            continue
         iterator.set_description(pair)
         select = pair.split("-")
 
