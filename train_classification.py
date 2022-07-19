@@ -66,7 +66,7 @@ def main(cfg: DictConfig) -> None:
     )
 
     # Model
-    mdl = model.get_model(cfg, n_classes=wt_dataset.n_classes)
+    mdl = model.get_model(cfg, cwd=cwd, n_classes=wt_dataset.n_classes)
 
     # Loggers
     logger = None
@@ -86,7 +86,7 @@ def main(cfg: DictConfig) -> None:
         callbacks.append(
             BackboneFinetuning(
                 unfreeze_backbone_at_epoch=cfg.model.only_head,
-                backbone_initial_ratio_lr=1,
+                backbone_initial_ratio_lr=1,  # todo doesn't work with lower values, investigate
                 # verbose=True,
                 train_bn=True,
             )
@@ -103,6 +103,9 @@ def main(cfg: DictConfig) -> None:
     trainer.fit(mdl, train_loader, valid_loader)
 
     # Inference
+    util.load_checkpoint_from_run_path(
+        mdl, path=os.getcwd(), select_checkpoint="average"
+    )
     predictions, features, y = mdl.inference(valid_loader)
 
     top_k = [1, 5, 10]

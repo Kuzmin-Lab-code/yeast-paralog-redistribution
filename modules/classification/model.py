@@ -1,10 +1,10 @@
 import itertools
 from pathlib import Path
+from typing import Union
 
 import numpy as np
 import pytorch_lightning as pl
 import torch
-from hydra.utils import get_original_cwd
 from omegaconf import DictConfig
 from torch import nn
 from torchmetrics import Accuracy
@@ -180,11 +180,12 @@ class LitModel(pl.LightningModule):
         return predictions, features, ys
 
 
-def get_model(cfg: DictConfig, n_classes: int):
-    cwd = Path(get_original_cwd())
+def get_model(cfg: DictConfig, cwd: Union[str, Path], n_classes: int) -> LitModel:
+    cwd = Path(cwd)
     checkpoint_path = getattr(cfg, "checkpoint", None)
 
     if checkpoint_path is not None:
+        # TODO add option to create encoder model without checkpoint
         print("Load encoder from segmentation checkpoint")
         cfg_segmentation, weights = util.load_cfg_and_checkpoint(cwd / checkpoint_path)
         print(f"Create a {cfg_segmentation.model.encoder_name} model")
@@ -195,7 +196,7 @@ def get_model(cfg: DictConfig, n_classes: int):
         )
         backbone.load_state_dict_from_segmentation(weights)
     else:
-        # todo parametrize with torchvision/timm models
+        # TODO parametrize with torchvision/timm models
         print("Create a resnet18 model")
         backbone = network.ResidualNetworkHeadless(
             num_units=2,  # resnet18

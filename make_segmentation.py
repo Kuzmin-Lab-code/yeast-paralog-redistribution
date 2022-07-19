@@ -124,7 +124,7 @@ def main():
     )
 
     # Load checkpoints
-    mdl = util.load_checkpoint_from_run_path(mdl, path, args.checkpoint)
+    util.load_checkpoint_from_run_path(mdl, path, args.checkpoint)
 
     original_shape = ads.get_original_shape()
     print("Original shape:", original_shape)
