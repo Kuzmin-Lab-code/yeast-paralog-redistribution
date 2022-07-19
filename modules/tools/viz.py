@@ -1,3 +1,4 @@
+import glob
 from pathlib import Path
 
 import pandas as pd
@@ -364,13 +365,15 @@ def plot_pca(
         save_path.mkdir(parents=True, exist_ok=True)
         pair = "-".join(np.unique(metainfo.GFP))
         plt.tight_layout()
+        # Save figure and point coordinates nearby
         plt.savefig(save_path / f"{pair}.{fmt}", bbox_inches="tight")
+        df.to_csv(save_path / f"{pair}.csv")
 
     return fig, ax
 
 
 def plot_pca_all_pairs(
-    meta_path: str = "./data/meta/",
+    metainfo_path: str = "./data/meta/",
     features_path: str = "./results/predictions-arc/",
     figsize: int = 7,
     use_seaborn: bool = False,
@@ -381,19 +384,20 @@ def plot_pca_all_pairs(
     label_legend_loc: int = 4,
     fmt: str = "pdf",
 ):
-    metainfo = pd.read_csv(
-        f"{meta_path}/metainfo.csv", index_col=0, dtype={"URL": object}
-    )
 
-    for pair in tqdm(np.unique(metainfo.pairs)):
+    metainfo_files = sorted(glob.glob(f"{metainfo_path}/*.csv"))
+    features_files = sorted(glob.glob(f"{features_path}/*.csv"))
+    assert len(metainfo_files) == len(features_files), "Number of files mismatch"
+
+    iterator = tqdm(zip(metainfo_files, features_files), total=len(metainfo_files))
+    for mfn, ffn in iterator:
+        pair = Path(ffn).stem
+        iterator.set_description(pair)
         if pair.startswith("control"):
             continue
-        metainfo_pair = pd.read_csv(
-            f"{meta_path}/metainfo_replicate*_{pair}.csv", index_col=0
-        )
-        features_pair = pd.read_csv(
-            f"{features_path}/{pair}-features.csv", index_col=0
-        ).drop("label", axis=1)
+
+        metainfo_pair = pd.read_csv(mfn, index_col=0)
+        features_pair = pd.read_csv(ffn, index_col=0).drop("label", axis=1)
 
         fig, ax = plot_pca(
             features=features_pair.values,

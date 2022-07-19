@@ -51,13 +51,13 @@ def localization(args: Namespace) -> None:
     save_path = f"{args.results_path}/localization-pca-{args.format}-replicates={args.separate_replicates}"
     logger.info(f"Save to {save_path}")
     plot_pca_all_pairs(
-        meta_path=args.meta_path,
+        metainfo_path=args.meta_path,
         features_path=args.features_path,
         fmt=args.format,
         separate_replicates=args.separate_replicates,
         save_path=save_path,
     )
-    pass
+    return
 
 
 if __name__ == "__main__":
