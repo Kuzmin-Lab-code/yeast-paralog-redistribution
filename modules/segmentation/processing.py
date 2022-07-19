@@ -284,7 +284,6 @@ def extract_frames_by_path(
             "n_frames": 0,
             "total": total_count,
         }
-        iterator.set_postfix(counts)
 
         try:
             # Make path to frames, they will be stored in a folder with the name of parent file
@@ -296,11 +295,11 @@ def extract_frames_by_path(
 
             # Extract frames from image
             frames = extract_frames_from_image(image, segmentation, **kwargs)
+            total_count += frames.shape[0]
             counts["n_frames"] = frames.shape[0]
-            counts_list.append(counts)
-
-            total_count += counts["n_frames"]
             counts["total"] = total_count
+
+            counts_list.append(counts)
             iterator.set_postfix(counts)
 
             # Save each frame in .npy file

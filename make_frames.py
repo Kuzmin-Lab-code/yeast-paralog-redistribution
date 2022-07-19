@@ -17,21 +17,22 @@ def main():
         "--segmentation",
         "-s",
         type=str,
-        default="./data/segmentation/",
+        # TODO replace with default path
+        default="results/segmentation/unet-resnet34/2022-07-14_00-20-42/inference",
         help="Path to segmentation",
     )
     parser.add_argument(
         "--images",
         "-i",
         type=str,
-        default="./data/images/experiment/input/",
+        default="data/images/experiment/input/",
         help="Path to images",
     )
     parser.add_argument(
         "--output",
         "-o",
         type=str,
-        default="./data/frames_updated/",
+        default="data/frames_final/",
         help="Path to frames",
     )
 

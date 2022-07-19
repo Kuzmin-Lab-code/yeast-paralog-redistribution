@@ -10,7 +10,9 @@ from modules.segmentation.processing import watershed_distance_map
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Segmentation postprocessing from probability maps")
+    parser = argparse.ArgumentParser(
+        description="Segmentation postprocessing from probability maps"
+    )
     parser.add_argument(
         "--path",
         "-p",

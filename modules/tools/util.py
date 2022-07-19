@@ -111,7 +111,10 @@ def load_cfg_and_checkpoint(run_path: str) -> Tuple[DictConfig, Dict]:
 
 
 def load_checkpoint_from_run_path(
-    model: torch.nn.Module, path: Union[str, Path], select_checkpoint: str = "average", strict: bool = True,
+    model: torch.nn.Module,
+    path: Union[str, Path],
+    select_checkpoint: str = "average",
+    strict: bool = True,
 ) -> torch.nn.Module:
     path = Path(path)
     # Load checkpoints
@@ -127,7 +130,11 @@ def load_checkpoint_from_run_path(
             f"Checkpoint {select_checkpoint} is not supported, choose from [average, last, best]"
         )
 
-    checkpoints = [torch.load(c)["state_dict"] for c in checkpoints]
-    checkpoints = average_weights(checkpoints)
-    model.load_state_dict(checkpoints, strict=strict)
+    if not checkpoints:
+        print(f"No checkpoints found in {path}, do not load weights")
+    else:
+        print(f"Loading {select_checkpoint} weights from {checkpoints}")
+        checkpoints = [torch.load(c)["state_dict"] for c in checkpoints]
+        checkpoints = average_weights(checkpoints)
+        model.load_state_dict(checkpoints, strict=strict)
     return model

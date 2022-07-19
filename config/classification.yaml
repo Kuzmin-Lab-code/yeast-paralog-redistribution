@@ -24,6 +24,6 @@ model:
 
 data:
   path_data: data
-  dir_frames: frames
+  dir_frames: frames_final
   validation_field: 4
   normalize: std
