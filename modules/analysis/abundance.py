@@ -289,7 +289,7 @@ def normalize_abundance_percentile_segmentation(
         .agg([percentile(p_min), percentile(p_max)])["mu"]
     )
 
-    files_metainfo = sorted(glob.glob(path_metainfo / f"*.csv"))
+    files_metainfo = sorted(glob.glob(f"{path_metainfo}/*.csv"))
     iterator = tqdm(files_metainfo)
     for fn in iterator:
         pair = Path(fn).stem
@@ -300,8 +300,8 @@ def normalize_abundance_percentile_segmentation(
         metainfo_pair = pd.read_csv(fn, index_col=0)
         for replicate_id in range(1, 4):
             replicate = f"replicate{replicate_id}"
-            p_min_value = abundance_statistics.loc[replicate_id, f"percentile_{p_min}"]
-            p_max_value = abundance_statistics.loc[replicate_id, f"percentile_{p_max}"]
+            p_min_value = abundance_statistics.loc[replicate, f"percentile_{p_min}"]
+            p_max_value = abundance_statistics.loc[replicate, f"percentile_{p_max}"]
 
             abundance_repl_pnorm = (
                 metainfo_pair.loc[metainfo_pair.replicate == replicate, "abundance"]

@@ -2,6 +2,8 @@ import argparse
 import logging
 from pathlib import Path
 
+import pandas as pd
+
 from modules.analysis.abundance import (
     calculate_mean_intensity_in_segmentation,
     normalize_abundance_percentile,
@@ -76,13 +78,19 @@ def main():
 
     elif args.normalization == "segmentation":
         logger.info("Percentile-normalizing abundance with segmentation")
-        mean_intensity = calculate_mean_intensity_in_segmentation(
-            path_img=args.path_img,
-            path_seg=args.path_seg,
-            image_fmt=args.image_fmt,
-            segmentation_fmt=args.segmentation_fmt,
-        )
-        mean_intensity.to_csv(path.parent / "mean_intensity.csv")
+        mean_intensity_path = path.parent / "mean_intensity.csv"
+        if mean_intensity_path.exists():
+            logger.info("Read mean intensity from file")
+            mean_intensity = pd.read_csv(mean_intensity_path, index_col=0)
+        else:
+            logger.info("Calculate mean intensity")
+            mean_intensity = calculate_mean_intensity_in_segmentation(
+                path_img=args.path_img,
+                path_seg=args.path_seg,
+                image_fmt=args.image_fmt,
+                segmentation_fmt=args.segmentation_fmt,
+            )
+            mean_intensity.to_csv(mean_intensity_path)
         abundance_statistics = normalize_abundance_percentile_segmentation(
             args.metainfo_path, *args.percentiles, mean_intensity=mean_intensity
         )
