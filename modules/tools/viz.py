@@ -416,10 +416,11 @@ def plot_pca_all_pairs(
 
 def plot_abundance_boxplots(
     metainfo_pair: DataFrame,
-    log_scale: bool = True,
+    log_scale: bool = False,
     separate_replicates: bool = True,
     save: bool = False,
     save_path: PathT = "../results/abundance/",
+    abundance_col: str = "abundance",
     fmt: str = "pdf",
 ):
     """
@@ -429,16 +430,20 @@ def plot_abundance_boxplots(
     :param separate_replicates: separate boxplots for each replicate
     :param save: save figure
     :param save_path: where to save figure
+    :param abundance_col: column name for abundance
     :param fmt: format to save figure
     :return:
     """
+    assert (
+        abundance_col in metainfo_pair.columns
+    ), f"Abundance column {abundance_col} not found"
     fig, axes = plt.subplots(ncols=2, figsize=(12, 4), sharey=True)
     pair = np.unique(metainfo_pair.GFP)
     for i, (gene, ax) in enumerate(zip(pair, axes)):
         sns.boxplot(
             data=metainfo_pair[metainfo_pair.GFP == gene],
             x="label",
-            y="abundance",
+            y=abundance_col,
             hue="replicate" if separate_replicates else None,
             ax=ax,
         )

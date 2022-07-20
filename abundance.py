@@ -8,7 +8,7 @@ from modules.analysis.abundance import calculate_protein_abundance
 def main():
     logger = logging.getLogger(__name__)
     parser = argparse.ArgumentParser(
-        "Calculate abundance if necessary, plot boxplot comparison in gene pairs"
+        "Calculate abundance and, if necessary, plot boxplot comparison in gene pairs"
     )
     parser.add_argument(
         "--metainfo_path",
@@ -50,6 +50,31 @@ def main():
     )
 
     parser.add_argument(
+        "--boxplot",
+        action="store_true",
+        help="Plot boxplot of abundance changes",
+    )
+
+    parser.add_argument(
+        "--abundance_col",
+        type=str,
+        default="abundance",
+        choices=[
+            "abundance",
+            "abundance_repl_pnorm_seg",
+            "abundance_repl_std",
+            "abundance_repl_pnorm",
+        ],
+        help="Column name for abundance in metainfo",
+    )
+
+    parser.add_argument(
+        "--log_scale",
+        action="store_true",
+        help="Plot abundance in log scale",
+    )
+
+    parser.add_argument(
         "--format",
         "-t",
         type=str,
@@ -63,17 +88,21 @@ def main():
     path = Path(args.metainfo_path)
     # Save nearby by default
     save_path = (
-        path.parent / f"abundance-{args.format}-replicates={args.separate_replicates}"
+        path.parent
+        / f"{args.abundance_col}-{args.format}-replicates={args.separate_replicates}-log={args.log_scale}"
     )
+    save_path.mkdir(exist_ok=True)
     logger.info(f"Save to {save_path}")
 
     calculate_protein_abundance(
         meta_path=path,
         reduce=args.reduce,
         force_update=args.force,
-        plot=True,
+        plot=args.boxplot,
         separate_replicates=args.separate_replicates,
         save_path=save_path,
+        abundance_col=args.abundance_col,
+        log_scale=args.log_scale,
         fmt=args.format,
     )
 

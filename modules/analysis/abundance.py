@@ -41,6 +41,8 @@ def calculate_protein_abundance(
     separate_replicates: bool = False,
     meta_path: PathT = "./data/meta/",
     save_path: PathT = "./results/abundance/",
+    abundance_col: str = "abundance",
+    log_scale: bool = False,
     fmt: str = "pdf",
 ) -> None:
     """
@@ -52,6 +54,8 @@ def calculate_protein_abundance(
     :param separate_replicates: bool, to analyse replicates separately
     :param meta_path: path to metadata files for each pair
     :param save_path: path to save boxplots
+    :param abundance_col: name of column to read/save abundance scores
+    :param log_scale: bool, to use log scale for boxplots
     :param fmt: save format of boxplots (pdf, png, etc.)
     :return:
     """
@@ -65,8 +69,8 @@ def calculate_protein_abundance(
             continue
 
         metainfo_pair = pd.read_csv(fn, index_col=0)
-        if "abundance" not in metainfo_pair.columns or force_update:
-            metainfo_pair["abundance"] = calculate_intensity_list(
+        if abundance_col not in metainfo_pair.columns or force_update:
+            metainfo_pair[abundance_col] = calculate_intensity_list(
                 metainfo_pair.file, reduce
             )
             if update_metainfo:
@@ -74,11 +78,13 @@ def calculate_protein_abundance(
 
         if plot:
             plot_abundance_boxplots(
-                metainfo_pair,
+                metainfo_pair=metainfo_pair,
                 save_path=save_path,
                 separate_replicates=separate_replicates,
                 save=True,
                 fmt=fmt,
+                abundance_col=abundance_col,
+                log_scale=log_scale,
             )
 
 
