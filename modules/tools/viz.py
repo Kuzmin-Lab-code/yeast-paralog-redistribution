@@ -373,11 +373,11 @@ def plot_pca(
 
 
 def plot_pca_all_pairs(
-    metainfo_path: str = "./data/meta/",
-    features_path: str = "./results/predictions-arc/",
+    metainfo_path: Union[str, Path] = "./data/meta/",
+    features_path: Union[str, Path] = "./results/predictions-arc/",
     figsize: int = 7,
     use_seaborn: bool = False,
-    save_path: str = "./results/pca",
+    save_path: Union[str, Path] = "./results/pca",
     scale: bool = True,
     separate_replicates: bool = False,
     replicate_legend_loc: int = 2,

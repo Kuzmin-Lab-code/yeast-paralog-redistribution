@@ -1,9 +1,13 @@
+import glob
+
 import numpy as np
 import pandas as pd
+from matplotlib.pyplot import imread
 from scipy.stats import pearsonr
 from sklearn.decomposition import PCA
 from tqdm.auto import tqdm
 
+from modules.tools.image import read_np_pil
 from modules.tools.types import *
 from modules.tools.viz import plot_abundance_boxplots
 
@@ -44,21 +48,30 @@ def calculate_protein_abundance(
     :param update_metainfo: bool, to save updated metainfo with abundance scores
     :param reduce: reduce function (mean, median or max)
     :param plot: bool, to save boxplots
+    :param force_update: bool, to force update of metainfo with abundance column if it is already present
+    :param separate_replicates: bool, to analyse replicates separately
+    :param meta_path: path to metadata files for each pair
+    :param save_path: path to save boxplots
+    :param fmt: save format of boxplots (pdf, png, etc.)
     :return:
     """
-    metainfo = pd.read_csv(f"{str(meta_path)}/metainfo.csv")
-    for pair in tqdm(np.unique(metainfo.pairs)):
+    metainfo_files = sorted(glob.glob(f"{meta_path}/*.csv"))
+    iterator = tqdm(metainfo_files, position=0)
+    for fn in iterator:
+        pair = Path(fn).stem
+        iterator.set_description(pair)
+        # Ignore controls for now
         if pair.startswith("control"):
-            # Ignore controls for now
             continue
-        metainfo_pair = pd.read_csv(
-            f"{str(meta_path)}/metainfo_replicate*_{pair}.csv", index_col=0
-        )
+
+        metainfo_pair = pd.read_csv(fn, index_col=0)
         if "abundance" not in metainfo_pair.columns or force_update:
-            abundance = calculate_intensity_list(metainfo_pair, reduce)
-            metainfo_pair["abundance"] = abundance
+            metainfo_pair["abundance"] = calculate_intensity_list(
+                metainfo_pair.file, reduce
+            )
             if update_metainfo:
-                metainfo_pair.to_csv(f"{str(meta_path)}/metainfo_replicate*_{pair}.csv")
+                metainfo_pair.to_csv(fn)
+
         if plot:
             plot_abundance_boxplots(
                 metainfo_pair,
@@ -192,3 +205,208 @@ def calculate_pca_abundance_correlation_all_pairs(
         res = calculate_pca_abundance_correlation(pair)
         results.extend(res)
     return pd.DataFrame(results)
+
+
+def calculate_mean_intensity_in_segmentation(
+    path_img: Union[str, Path] = "data/images/experiment/input",
+    path_seg: Union[
+        str, Path
+    ] = "results/segmentation/unet-resnet34/2022-07-14_00-20-42/inference",
+    segmentation_fmt: str = "png",
+    image_fmt: str = "flex",
+) -> pd.DataFrame:
+    """
+    Mask background pixels with segmentation, calculate mean cell intensity in segmented areas
+    :param path_img: path to images
+    :param path_seg: path to segmentation
+    :param segmentation_fmt: segmentation file format
+    :param image_fmt: image file format
+    :return:
+    """
+    mean_intensity = []
+    files_image = sorted(glob.glob(f"{path_img}/**/*.{image_fmt}"))
+    iterator = tqdm(files_image)
+    for fi in iterator:
+        fi = Path(fi)
+        replicate = fi.parent.name
+        name = fi.stem
+        iterator.set_description(f"{replicate}/{name}")
+        fs = Path(path_seg) / replicate / f"{name}.{segmentation_fmt}"
+
+        if not fs.exists():
+            raise FileNotFoundError(f"{fs} does not exist")
+
+        image = read_np_pil(fi)
+        segmentation = imread(fs)
+
+        cell_pixels = image[segmentation > 0]
+        mu = cell_pixels.mean() if len(cell_pixels) > 0 else 0
+        n_pixels = len(cell_pixels)
+        iterator.set_postfix(
+            dict(img=image.shape, seg=segmentation.shape, n_pixels=n_pixels, mean=mu)
+        )
+        mean_intensity.append(dict(r=replicate, mu=mu, n_pixels=n_pixels))
+
+    mean_intensity = pd.DataFrame(mean_intensity)
+    mean_intensity["r"] = mean_intensity.r.astype("category")
+    return mean_intensity
+
+
+def percentile(n):
+    def percentile_(x):
+        return np.percentile(x, n)
+
+    percentile_.__name__ = f"percentile_{n}"
+    return percentile_
+
+
+def normalize_abundance_percentile_segmentation(
+    path_metainfo: Union[
+        str, Path
+    ] = "results/classification/2022-07-18_15-50-57/inference/metainfo",
+    p_min: float = 0.1,
+    p_max: float = 99.9,
+    mean_intensity: Optional[pd.DataFrame] = None,
+    **kwargs: Any,
+) -> pd.DataFrame:
+    """
+    Normalize abundance scores to percentile of segmented cells
+    abundance = (abundance - p_min) / (p_max - p_min)
+    :param path_metainfo: path to metainfo .csv files for each pair
+    :param p_min: low percentile
+    :param p_max: high percentile
+    :param mean_intensity: output of calculate_mean_intensity_in_segmentation()
+    :param kwargs: passed to calculate_mean_intensity_in_segmentation() if mean_dict is None
+    :return: abundance statistics (aggregated dataframe)
+    """
+
+    if mean_intensity is None:
+        mean_intensity = calculate_mean_intensity_in_segmentation(**kwargs)
+
+    abundance_statistics = (
+        mean_intensity.loc[mean_intensity.n_pixels != 0, ["mu", "r"]]
+        .groupby("r")
+        .agg([percentile(p_min), percentile(p_max)])["mu"]
+    )
+
+    files_metainfo = sorted(glob.glob(path_metainfo / f"*.csv"))
+    iterator = tqdm(files_metainfo)
+    for fn in iterator:
+        pair = Path(fn).stem
+        iterator.set_description(pair)
+        if pair == "control":
+            continue
+
+        metainfo_pair = pd.read_csv(fn, index_col=0)
+        for replicate_id in range(1, 4):
+            replicate = f"replicate{replicate_id}"
+            p_min_value = abundance_statistics.loc[replicate_id, f"percentile_{p_min}"]
+            p_max_value = abundance_statistics.loc[replicate_id, f"percentile_{p_max}"]
+
+            abundance_repl_pnorm = (
+                metainfo_pair.loc[metainfo_pair.replicate == replicate, "abundance"]
+                - p_min_value
+            ) / (p_max_value - p_min_value)
+
+            metainfo_pair.loc[
+                metainfo_pair.replicate == replicate, "abundance_repl_pnorm_seg"
+            ] = abundance_repl_pnorm
+
+        metainfo_pair.to_csv(fn)
+
+    return abundance_statistics
+
+
+def standardize_abundance(
+    path_metainfo: Union[
+        str, Path
+    ] = "results/classification/2022-07-18_15-50-57/inference/metainfo",
+) -> pd.DataFrame:
+    """
+    Standardize abundance scores with mean and std by replicate
+    :param path_metainfo: path to metainfo .csv files for each pair
+    :return: abundance statistics (aggregated dataframe)
+    """
+
+    files_metainfo = sorted(glob.glob(path_metainfo / f"*.csv"))
+    iterator = tqdm(files_metainfo, desc="read abundance scores")
+
+    abundances = [pd.read_csv(fn).loc[:, ["replicate", "abundance"]] for fn in iterator]
+    abundances = pd.concat(abundances)
+    abundance_statistics = abundances.groupby("replicate").agg(["mean", "std"])
+
+    for fn in iterator:
+        pair = Path(fn).stem
+        iterator.set_description(pair)
+        if pair == "control":
+            continue
+
+        metainfo_pair = pd.read_csv(fn, index_col=0)
+        for replicate_id in range(1, 4):
+            replicate = f"replicate{replicate_id}"
+            mu = abundance_statistics.loc[replicate, "abundance"]["mean"]
+            std = abundance_statistics.loc[replicate, "abundance"]["std"]
+
+            abundance_repl_std = (
+                metainfo_pair.loc[metainfo_pair.replicate == replicate, "abundance"]
+                - mu
+            ) / std
+            metainfo_pair.loc[
+                metainfo_pair.replicate == replicate, "abundance_repl_std"
+            ] = abundance_repl_std
+
+        metainfo_pair.to_csv(fn)
+
+    return abundance_statistics
+
+
+def normalize_abundance_percentile(
+    path_metainfo: Union[
+        str, Path
+    ] = "results/classification/2022-07-18_15-50-57/inference/metainfo",
+    p_min: float = 0.1,
+    p_max: float = 99.9,
+) -> pd.DataFrame:
+    """
+    Normalize abundance scores to percentile of all abundance scores
+    :param path_metainfo: path to metainfo .csv files for each pair
+    :param p_min: low percentile
+    :param p_max: high percentile
+    :return: abundance statistics (aggregated dataframe)
+    """
+    files_metainfo = sorted(glob.glob(path_metainfo / f"*.csv"))
+    iterator = tqdm(files_metainfo, desc="read abundance scores")
+
+    abundances = [pd.read_csv(fn).loc[:, ["replicate", "abundance"]] for fn in iterator]
+    abundances = pd.concat(abundances)
+    abundance_statistics = abundances.groupby("replicate").agg(
+        [percentile(p_min), percentile(p_max)]
+    )
+
+    for fn in iterator:
+        pair = Path(fn).stem
+        iterator.set_description(pair)
+        if pair == "control":
+            continue
+
+        metainfo_pair = pd.read_csv(fn, index_col=0)
+        for replicate_id in range(1, 4):
+            replicate = f"replicate{replicate_id}"
+            p_min_value = abundance_statistics.loc[replicate, "abundance"][
+                f"percentile_{p_min}"
+            ]
+            p_max_value = abundance_statistics.loc[replicate, "abundance"][
+                f"percentile_{p_max}"
+            ]
+
+            abundance_repl_pnorm = (
+                metainfo_pair.loc[metainfo_pair.replicate == replicate, "abundance"]
+                - p_min_value
+            ) / (p_max_value - p_min_value)
+            metainfo_pair.loc[
+                metainfo_pair.replicate == replicate, "abundance_repl_pnorm"
+            ] = abundance_repl_pnorm
+
+        metainfo_pair.to_csv(fn)
+
+    return abundance_statistics
