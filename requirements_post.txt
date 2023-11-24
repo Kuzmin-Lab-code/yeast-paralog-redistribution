@@ -1,0 +1,5 @@
+papermill
+statsmodels
+pyfaidx
+roux == 0.1.0
+htsimaging >= 1.0.4

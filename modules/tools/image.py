@@ -1,5 +1,4 @@
 import numpy as np
-import torch
 from PIL import Image
 from tqdm.auto import tqdm
 
@@ -86,6 +85,7 @@ def log_transform_scale(img: Array) -> Array:
     if isinstance(img, ndarray):
         tfm = np.log1p(tfm)
     elif isinstance(img, Tensor):
+        import torch
         tfm = torch.log1p(tfm)
     return min_max_scale(tfm)
 

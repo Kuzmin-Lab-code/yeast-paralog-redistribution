@@ -1,0 +1,188 @@
+abundance:
+  cells:
+    controls: ${processed.abundance}/abundance_controls/01_renamed.tsv
+    paralogs: ${processed.abundance}/abundance/01_renamed.tsv
+  column: protein abundance mean
+  genes:
+    controls: ${processed.abundance}/abundance_controls/03_aggby_genes.tsv
+    paralogs: ${processed.abundance}/abundance/03_aggby_genes.tsv
+  path: ${processed.abundance}
+abundance_change:
+  classes:
+    decrease: dependency
+    increase: compensation
+  column:
+    classes: protein abundance change
+    scores: protein abundance difference (DELTA-WT)
+  genes:
+    controls: ${processed.abundance}/abundance_change_controls/02_classified.tsv
+    paralogs: ${processed.abundance}/abundance_change/02_classified.tsv
+colors:
+  compensation: '#D55E00'
+  default: '#50AADC'
+  dependency: '#0072B2'
+  gene1: '#0065d9'
+  gene2: '#ba9e00'
+  locs:
+    Cell periphery: '#d9d9d9'
+    Cytoplasm: '#8dd3c7'
+    ER: '#fccde5'
+    Golgi: '#ffffb3'
+    Mitochondria: '#ccebc5'
+    Nucleolus: '#bebada'
+    Nucleus: '#bc80bd'
+  none: '#D3DDDC'
+  paralog1: '#3b7ec0'
+  paralog1 alt: '#50AADC'
+  paralog2: '#f16522'
+  paralog2 alt: '#f79e6d'
+  paralogs mix: '#967271'
+  redistribution: '#009E73'
+data:
+  exclude:
+    pairs:
+    - control
+    - control1
+    - control2
+    - control3
+    - RTT101-YBR259W
+  path: ../data
+  subsets:
+    controls:
+      pairs:
+      - CIT2-SKG1
+      - AIM20-YMR310C
+      - CIT1-YGR283C
+  validation:
+    images: ${..path}/validation/
+dataset:
+  external:
+    path: {}
+  ids:
+    genes: {}
+  path: {}
+dataset_config_path: ${dataset_path}/configs/metadata.yaml
+dataset_path: ../../../datasets/
+features:
+  filtered:
+    controls: ${processed.processed}/features_controls_filtered/01_mapped.tsv
+    paralogs: ${processed.processed}/features_filtered/01_mapped.tsv
+  zscore:
+    controls: ${processed.processed}/features_controls_filtered/02_zscore.tsv
+    paralogs: ${processed.processed}/features_filtered/02_zscore.tsv
+ids:
+  genes: ${processed.qc}/gene_ids.tsv
+  pairs: ${processed.qc}/genes_ids.tsv
+kernels:
+  default: parlocred
+mechanisms:
+  non_canonical_isoform:
+    path: ${..path}/non_canonical_isoform/
+    read_depth:
+      CUE4: ${.path}/CUE4.tsv
+      path: ${..path}/01_read_depth_TIS_profiling/
+  path: ${processed.mechanisms}
+merged:
+  columns:
+    abundance: ${abundance.column}
+    redistribution: ${redistribution.distances.column}
+  genes: ${processed.merged}/00_genes.tsv
+  input:
+    abundance_change: ${abundance_change.genes.paralogs}
+    redistribution: ${redistribution.classified.genes}
+    relocalization: ${relocalization.classified}
+  pairs: ${processed.merged}/01_pairs.tsv
+metainfo:
+  combined:
+    controls: ${processed.ids}/metainfo_controls/01_cleaned.tsv
+    paralogs: ${processed.ids}/metainfo/01_cleaned.tsv
+  filtered:
+    controls: ${processed.qc}/metainfo_controls/04_filteredby_cell_counts.tsv
+    paralogs: ${processed.qc}/metainfo/04_filteredby_cell_counts.tsv
+  raw:
+    controls: ${processed.ids}/metainfo_controls/00_raw_combined.tsv
+    paralogs: ${processed.ids}/metainfo/00_raw_combined.tsv
+pcs:
+  controls: ${processed.processed}/pca_controls/pcs/*.tsv
+  paralogs: ${processed.processed}/pca/pcs/*.tsv
+pre_processed:
+  features:
+    path: ${..path}/classification/2022-07-18_15-50-57/inference/features/
+  metainfo:
+    path: ${..path}/classification/2022-07-18_15-50-57/inference/metainfo/
+  path: ../pre_processed/
+  validation:
+    images: ${..path}/validation/
+  visual_inspections:
+    redistribution: ${..path}/redistribution_visual_inspection.yaml
+predictors:
+  mapped:
+    predictors:
+      genes: ${.path}/genes.tsv
+      pairs: ${.path}/pairs.tsv
+      path: ../dataset/predictors/01_mapped/
+  path: ${processed.predictors}
+  processed:
+    path: ${..path}/01_processed/
+    predictors:
+      genes: ${.path}/genes.tsv
+      pairs: ${.path}/pairs.tsv
+      path: ${..path}/predictors/
+processed:
+  abundance: ${.path}/30_abundance/
+  ids: ${.path}/00_ids/
+  mechanisms: ${.path}/80_mechanisms/
+  merged: ${.path}/50_merged/
+  path: ../processed${version.suffix}/
+  predictors: ${.path}/60_predictors
+  processed: ${.path}/20_processed/
+  qc: ${.path}/10_qc/
+  redistribution: ${.path}/40_redistribution/
+  settings:
+    max_q_abundance_change:
+      value: 0.05
+    min_abundance_change_lfc:
+      value: 0.2
+  validations: ${.path}/90_validations/
+redistribution:
+  classified:
+    genes: ${.path}/01_output.tsv
+    method: ROC
+    path: ${..path}/03_classified/
+    stats: ${.path}/stats.yaml
+  distances:
+    column: euclidean distance
+    genes:
+      controls: ${processed.redistribution}/01_scores/controls/genes/03_small.tsv
+      paralogs: ${processed.redistribution}/01_scores/paralogs/genes/03_small.tsv
+    replicates:
+      controls: ${processed.redistribution}/01_scores/controls/replicates/03_small.tsv
+      paralogs: ${processed.redistribution}/01_scores/paralogs/replicates/03_small.tsv
+  merged:
+    checks: ${processed.redistribution}/02_merged/checks/
+    distance between:
+    - PARALOG1-GFP PARALOG2-DELTA and PARALOG1-GFP PARALOG2-WT
+    - PARALOG2-GFP PARALOG1-DELTA and PARALOG2-GFP PARALOG1-WT
+    genes: ${processed.redistribution}/02_merged/02_small.tsv
+    method: ROC
+  path: ${processed.redistribution}
+relocalization:
+  classified:
+    genes: ${..path}/genes/01_small.tsv
+    pairs: ${..path}/pairs/01_small.tsv
+  path: ${processed.processed}/relocalization
+scripts:
+  io_read_nd2: ../../../code/htsimaging/examples/io_read_nd2.ipynb
+  protein_abundance_and_normalization: ../../../code/htsimaging/examples/protein_abundance_and_normalization.ipynb
+  protein_abundance_by_marker_location: ../../../code/htsimaging/examples/protein_abundance_by_marker_location.ipynb
+species_name: Scerevisiae
+validations:
+  CUE1_CUE4:
+    GFP_intensity:
+      path: ${..path}/01_GFP_intensity_segmentedby_gfp_channel
+    path: ${..path}/CUE1_CUE4/
+  path: ${processed.validations}
+version:
+  name: ''
+  number: latest
+  suffix: /${version.number}

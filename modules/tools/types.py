@@ -7,6 +7,7 @@ from numpy import ndarray
 from omegaconf import DictConfig
 from pandas.core.frame import DataFrame
 from torch import Tensor
+from bokeh.models import glyphs
 
 Array = Union[ndarray, Tensor]
 PathT = Union[Path, str]

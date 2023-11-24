@@ -240,7 +240,7 @@ def extract_frames_from_image(
         s = tuple(slice(int(x - size // 2), int(x + size // 2)) for x in c)
         out[i] = pad_image[s]
 
-    return out
+    return out,centroids
 
 
 def extract_frames_by_path(
@@ -291,10 +291,10 @@ def extract_frames_by_path(
 
             # Read image and segmentation
             image = read_np_pil(fi)
-            segmentation = imread(fs)
+            segmentation = imread(str(fs))
 
             # Extract frames from image
-            frames = extract_frames_from_image(image, segmentation, **kwargs)
+            frames,centroids = extract_frames_from_image(image, segmentation, **kwargs)
             total_count += frames.shape[0]
             counts["n_frames"] = frames.shape[0]
             counts["total"] = total_count
@@ -305,13 +305,14 @@ def extract_frames_by_path(
             # Save each frame in .npy file
             for i, frame in enumerate(frames):
                 np.save(str(path_frames_from_image / f"{i:05d}.npy"), frame)
+            np.save(str(path_frames_from_image / "centroids.npy"), centroids)
 
         except FileExistsError:
             # Skip existing directories
             continue
 
         except Exception as e:
-            print(e)
+            print(fi,fs,e)
             print(
                 f"Error occurred in {path_frames_from_image}, remove the directory and break"
             )

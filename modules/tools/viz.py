@@ -3,7 +3,6 @@ from pathlib import Path
 
 import pandas as pd
 import seaborn as sns
-from bokeh.models import glyphs
 from matplotlib import pyplot as plt
 from matplotlib.patches import Ellipse
 from skimage.color import label2rgb
@@ -194,6 +193,7 @@ def get_confidence_ellipse_bokeh(
     :param lw: linewidth
     :return: bokeh glyph with confidence ellipse
     """
+    from bokeh.models import glyphs
     ellipse_params = calculate_confidence_ellipse(x, y, sd)
 
     glyph = glyphs.Ellipse(
@@ -211,27 +211,42 @@ def get_confidence_ellipse_bokeh(
 
 def set_legend_marker_alpha(legend, alpha: float = 1):
     for lh in legend.legendHandles:
-        lh._legmarker.set_alpha(alpha)
+        lh.set_alpha(alpha)
 
 
 def plot_pca(
-    features: ndarray,
-    metainfo: DataFrame,
+    features: ndarray=None,
+    metainfo: DataFrame=None,
+    df: DataFrame=None,
     figsize: int = 7,
     use_seaborn: bool = False,
     save_path: Optional[str] = None,
     scale: bool = True,
+    show_n:bool=True,
     separate_replicates: bool = False,
     include_replicates: Optional[Tuple[int]] = None,
     replicate_legend_loc: int = 2,
-    label_legend_loc: int = 4,
+    label_legend_loc: int = 0,
+    # Define color/shape scheme
+    colors: np.array = np.array(["#377eb8", "#e41a1c", "#ff7f00", "#4daf4a"]),
+    shapes: list= ["o", "^", "s"],
+    markersize: float=6,
+    legend_markerscale: float=1.5,
+    show_legends: bool= True,
+    alpha: float=0.3,
+    ax: plt.Axes=None,
     fmt: str = "pdf",
+    kws_legend: dict={},
+    **kws_scatter: dict,
 ):
     """
     Plot PCA of features array given metainfo data
     :param features: array of float features (N frames, N features)
+    :param df: DataFrame containing the PCs, with the columns: 'x','y','Label' and 'Replicate'.
     :param metainfo: metainfo about each frame
     :param figsize: figure size
+    :param markersize: size of the markers.
+    :param alpha: transparency.
     :param use_seaborn: bool, produce basic plot with seaborn
     :param save_path: dir to save image, do not save if None
     :param scale: bool, apply standard scaling before PCA
@@ -240,27 +255,26 @@ def plot_pca(
     :param label_legend_loc, location of label legend, in bottom-right corner by default (4)
     :param replicate_legend_loc, location of replicate legend, in top-left corner by default (2)
     :param fmt, format to save
+    :param kws_legend, parameters provided to `plt.legend`.
+    :param kws_scatter, keyword parameters provided to `sns.scatterplot` or `ax.plot`.
     :return:
     """
+    
+    if df is None:
+        # Transform features
+        tfm = PCA(n_components=2)
+        if scale:
+            tfm = make_pipeline(StandardScaler(), tfm)
+        features_tfm = tfm.fit_transform(features)
 
-    # Define color/shape scheme
-    colors = np.array(["#377eb8", "#e41a1c", "#ff7f00", "#4daf4a"])
-    shapes = ["o", "^", "s"]
-
-    # Transform features
-    tfm = PCA(n_components=2)
-    if scale:
-        tfm = make_pipeline(StandardScaler(), tfm)
-    features_tfm = tfm.fit_transform(features)
-
-    df = pd.DataFrame(
-        {
-            "x": features_tfm[:, 0],
-            "y": features_tfm[:, 1],
-            "Label": metainfo.label,
-            "Replicate": metainfo.replicate.str.replace("replicate", ""),
-        }
-    )
+        df = pd.DataFrame(
+            {
+                "x": features_tfm[:, 0],
+                "y": features_tfm[:, 1],
+                "Label": metainfo.label,
+                "Replicate": metainfo.replicate.str.replace("replicate", ""),
+            }
+        )
 
     if include_replicates is not None:
         include_replicates = [str(i) for i in include_replicates]
@@ -268,10 +282,11 @@ def plot_pca(
 
     label_order, label_count = np.unique(df.Label, return_counts=True)
     if len(label_order) > 3:
-        label_order = label_order[[1, 0, 3, 2]]  # WT comes first
-        label_count = label_count[[1, 0, 3, 2]]  # WT comes first
+        label_order = label_order[[0, 1, 2, 3]]  #[[1, 0, 3, 2]]  # WT comes first
+        label_count = label_count[[0, 1, 2, 3]]  #[[1, 0, 3, 2]]  # WT comes first
     replicate_order, replicate_count = np.unique(df.Replicate, return_counts=True)
-    fig, ax = plt.subplots(figsize=(figsize, figsize))
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(figsize, figsize))
 
     # Default seaborn version
     if use_seaborn:
@@ -281,10 +296,11 @@ def plot_pca(
             y="y",
             hue="Label",
             style="Replicate" if separate_replicates else None,
-            alpha=0.5,
+            s=markersize,
+            alpha=alpha,
             hue_order=label_order,
-            s=15,
             ax=ax,
+            **kws_scatter,
         )
     else:
         points_label = []
@@ -302,12 +318,13 @@ def plot_pca(
                     sub_df.x,
                     sub_df.y,
                     shape,
-                    markersize=6,
+                    markersize=markersize,
                     label=label,
-                    alpha=0.3,
+                    alpha=alpha,
                     color=color,
                     markeredgecolor="white",
-                    markeredgewidth=0.5,
+                    markeredgewidth=0.1,
+                    **kws_scatter,
                 )
                 points_replicate_label.append(points)
                 if not separate_replicates:
@@ -320,45 +337,50 @@ def plot_pca(
                 df.loc[df.Label == label, "x"],
                 df.loc[df.Label == label, "y"],
                 color=color,
-                lw=2,
+                lw=1,
             )
             ax.add_artist(ellipse)
 
         # Legends
-        # Replicates and shapes
-        if separate_replicates:
-            legend_replicate = ax.legend(
-                points_label[-1],
-                [
-                    f"Replicate {r} ({c})"
-                    for r, c in zip(replicate_order, replicate_count)
-                ],
-                loc=replicate_legend_loc,
-                markerscale=1.5,
-                framealpha=0.8,
-                fancybox=True,
-                frameon=True,
+        if show_legends:
+            # Replicates and shapes
+            if separate_replicates:
+                legend_replicate = ax.legend(
+                    points_label[-1],
+                    [
+                        f"Replicate {r} ({c})"
+                        for r, c in zip(replicate_order, replicate_count)
+                    ],
+                    loc=replicate_legend_loc,
+                    markerscale=legend_markerscale,
+                    framealpha=0.8,
+                    fancybox=True,
+                    frameon=True,
+                )
+                legend_replicate.set_zorder(6)
+                set_legend_marker_alpha(legend_replicate, 1)
+                ax.add_artist(legend_replicate)
+
+            # Labels and colors
+            legend_label = ax.legend(
+                [lab[0] for lab in points_label if len(lab) != 0],
+                [f"{r}\n(n={c})" if show_n and nloc=='legend' else r.replace(' ','\n') for r, c in zip(label_order, label_count)],
+                loc=label_legend_loc,
+                markerscale=legend_markerscale,
+                **{**dict(
+                    frameon=False,
+                    # framealpha=0.8,
+                    # fancybox=True,
+                    bbox_to_anchor=[1,1],
+                    ),
+                **kws_legend # overwite defaults with the inputs
+                }
             )
-            legend_replicate.set_zorder(6)
-            set_legend_marker_alpha(legend_replicate, 1)
-            ax.add_artist(legend_replicate)
-
-        # Labels and colors
-        legend_label = ax.legend(
-            [lab[0] for lab in points_label if len(lab) != 0],
-            [f"{r} ({c})" for r, c in zip(label_order, label_count)],
-            loc=label_legend_loc,
-            markerscale=1.5,
-            framealpha=0.8,
-            fancybox=True,
-            frameon=True,
-        )
-        legend_label.set_zorder(6)
-        set_legend_marker_alpha(legend_label, 1)
-        ax.add_artist(legend_label)
-
-    ax.set_xlabel("PCA 0")
-    ax.set_ylabel("PCA 1")
+            legend_label.set_zorder(6)
+            set_legend_marker_alpha(legend_label, 1)
+            ax.add_artist(legend_label)        
+    ax.set_xlabel("PC1")
+    ax.set_ylabel("PC2")
 
     if save_path is not None:
         save_path = Path(save_path)
@@ -368,8 +390,7 @@ def plot_pca(
         # Save figure and point coordinates nearby
         plt.savefig(save_path / f"{pair}.{fmt}", bbox_inches="tight")
         df.to_csv(save_path / f"{pair}.csv")
-
-    return fig, ax
+    return ax
 
 
 def plot_pca_all_pairs(
@@ -501,3 +522,53 @@ def plot_relative_changes(
     plt.tight_layout()
     ax.set_xlabel("log relative intensity (delta / WT)")
     plt.show()
+
+def plot_umap(
+    df3:pd.DataFrame,
+    show_outlines: bool=False,
+    )->plt.Axes:
+    """
+    Plot UMAP.
+    """
+    from roux.viz.colors import saturate_color
+    palette=dict(zip(sorted(df3['construct label'].unique()),
+    [
+    saturate_color(metadata['colors']['gene1'],0.5),
+    metadata['colors']['gene1'],
+    saturate_color(metadata['colors']['gene2'],0.5),
+    metadata['colors']['gene2'],
+    ]))
+    fig,ax=plt.subplots(figsize=[3,3])
+    ax=sns.scatterplot(
+        data=df3,
+        x='x',
+        y='y',
+        hue='construct label',
+        ec=None,
+        alpha=0.5,
+        s=5,
+        hue_order=palette.keys(),
+        palette=palette.values(),
+        )
+    if show_outlines:
+        sns.kdeplot(
+            data=df3, 
+            x="x", 
+            y="y", 
+            hue="construct label",
+            ax=ax,
+            alpha=0.2,
+            levels=[0.25],
+            hue_order=palette.keys(),
+            palette=palette.values(),
+            )
+    ax.legend(bbox_to_anchor=[1,1],frameon=False)
+    ax.grid(False)
+    ax.axis('off')
+    ax.margins(tight=True)
+    off_arrow=0.2#.25
+    ax.arrow(x=off_arrow, y=off_arrow, dx=0.1, dy=0, head_width = .02,transform=fig.transFigure,clip_on=False,color='k',lw=1)
+    ax.arrow(x=off_arrow, y=off_arrow, dx=0, dy=0.1, head_width = .02,transform=fig.transFigure,clip_on=False,color='k',lw=1)
+    ax.text(x=off_arrow,y=off_arrow-0.01,s="UMAP1",transform=fig.transFigure,ha='left',va='top')
+    ax.text(y=off_arrow,x=off_arrow-0.01,s="UMAP2",transform=fig.transFigure,rotation=90,ha='right',va='bottom')
+    return ax
